@@ -3,10 +3,13 @@ package jetstream
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/dracoblue/atproto-push-gateway/internal/profile"
 	"github.com/dracoblue/atproto-push-gateway/internal/push"
 	"github.com/dracoblue/atproto-push-gateway/internal/store"
 )
@@ -66,6 +69,16 @@ func commitEvent(operation, collection, rkey string, record interface{}) *Commit
 
 func TestHandleCommit_LikeNotifiesRegisteredTarget(t *testing.T) {
 	c, s, sender := newTestConsumer(t)
+	profileServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{
+			"displayName": "Alice",
+			"handle":      "alice.test",
+			"avatar":      "https://cdn.example/alice.jpg",
+		})
+	}))
+	t.Cleanup(profileServer.Close)
+	c.profileResolver = profile.NewResolver()
+	c.profileResolver.SetAPIBaseURL(profileServer.URL)
 	s.RegisterToken("did:plc:bob", "ios", "ExponentPushToken[bob]", "org.example.app")
 
 	c.handleCommit("did:plc:alice", commitEvent("create", "app.bsky.feed.like", "3kco", map[string]interface{}{
@@ -92,7 +105,10 @@ func TestHandleCommit_LikeNotifiesRegisteredTarget(t *testing.T) {
 	if n.Data["recipientDid"] != "did:plc:bob" || n.Data["actorDid"] != "did:plc:alice" {
 		t.Errorf("unexpected recipient/actor: %q / %q", n.Data["recipientDid"], n.Data["actorDid"])
 	}
-	if n.Title != "Someone liked your post" || n.Body != "Open Aery to view it." {
+	if n.Data["actorAvatar"] != "https://cdn.example/alice.jpg" {
+		t.Errorf("unexpected actor avatar %q", n.Data["actorAvatar"])
+	}
+	if n.Title != "Alice liked your post" || n.Body != "Open Aery to view it." {
 		t.Errorf("unexpected title/body: %q / %q", n.Title, n.Body)
 	}
 	if c.GetStats().MatchedEvents != 1 {

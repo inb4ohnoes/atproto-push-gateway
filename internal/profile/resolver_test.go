@@ -91,6 +91,7 @@ func TestFetchProfile_HappyPath(t *testing.T) {
 			"did":         "did:plc:alice",
 			"handle":      "alice.test",
 			"displayName": "Alice",
+			"avatar":      "https://cdn.example/alice.jpg",
 		})
 	}))
 	defer srv.Close()
@@ -98,9 +99,9 @@ func TestFetchProfile_HappyPath(t *testing.T) {
 	r := NewResolver()
 	r.apiBaseURL = srv.URL
 
-	displayName, handle := r.ResolveProfile("did:plc:alice")
-	if displayName != "Alice" || handle != "alice.test" {
-		t.Errorf("got (%q, %q), want (Alice, alice.test)", displayName, handle)
+	displayName, handle, avatar := r.ResolveProfile("did:plc:alice")
+	if displayName != "Alice" || handle != "alice.test" || avatar != "https://cdn.example/alice.jpg" {
+		t.Errorf("got (%q, %q, %q), want (Alice, alice.test, https://cdn.example/alice.jpg)", displayName, handle, avatar)
 	}
 
 	// Second call must hit the cache, not the server
@@ -123,9 +124,9 @@ func TestFetchProfile_Non200(t *testing.T) {
 	r := NewResolver()
 	r.apiBaseURL = srv.URL
 
-	displayName, handle := r.ResolveProfile("did:plc:missing")
-	if displayName != "" || handle != "" {
-		t.Errorf("expected empty profile on 404, got (%q, %q)", displayName, handle)
+	displayName, handle, avatar := r.ResolveProfile("did:plc:missing")
+	if displayName != "" || handle != "" || avatar != "" {
+		t.Errorf("expected empty profile on 404, got (%q, %q, %q)", displayName, handle, avatar)
 	}
 }
 
@@ -138,8 +139,8 @@ func TestFetchProfile_InvalidJSON(t *testing.T) {
 	r := NewResolver()
 	r.apiBaseURL = srv.URL
 
-	displayName, handle := r.ResolveProfile("did:plc:alice")
-	if displayName != "" || handle != "" {
-		t.Errorf("expected empty profile on parse error, got (%q, %q)", displayName, handle)
+	displayName, handle, avatar := r.ResolveProfile("did:plc:alice")
+	if displayName != "" || handle != "" || avatar != "" {
+		t.Errorf("expected empty profile on parse error, got (%q, %q, %q)", displayName, handle, avatar)
 	}
 }

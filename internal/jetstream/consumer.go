@@ -725,8 +725,9 @@ func (c *Consumer) sendNotification(actorDID, targetDID, reason, recordURI, subj
 	// Resolve actorDID to display name + handle for client-side formatting
 	actorDisplayName := ""
 	actorHandle := ""
+	actorAvatar := ""
 	if c.profileResolver != nil {
-		actorDisplayName, actorHandle = c.profileResolver.ResolveProfile(actorDID)
+		actorDisplayName, actorHandle, actorAvatar = c.profileResolver.ResolveProfile(actorDID)
 	}
 
 	// Lazy-fetch the subject post text for reasons where the post is in
@@ -752,6 +753,7 @@ func (c *Consumer) sendNotification(actorDID, targetDID, reason, recordURI, subj
 				"actorDid":         actorDID,
 				"actorDisplayName": actorDisplayName,
 				"actorHandle":      actorHandle,
+				"actorAvatar":      actorAvatar,
 			},
 		}
 		if subjectURI != "" {
