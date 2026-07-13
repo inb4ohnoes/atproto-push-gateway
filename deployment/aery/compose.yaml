@@ -1,4 +1,4 @@
-name: aery-atproto-push
+version: "3.8"
 
 x-gateway: &gateway
   image: ${AERY_PUSH_IMAGE:?Set AERY_PUSH_IMAGE to an immutable image tag}
