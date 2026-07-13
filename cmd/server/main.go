@@ -72,6 +72,9 @@ func main() {
 	// APNs direct delivery (optional)
 	apnsKeyPath := getEnv("APNS_KEY_PATH", "")
 	apnsKeyBase64 := getEnv("APNS_KEY_BASE64", "")
+	apnsP12Path := getEnv("APNS_P12_PATH", "")
+	apnsP12Base64 := getEnv("APNS_P12_BASE64", "")
+	apnsP12Password := getEnv("APNS_P12_PASSWORD", "")
 	apnsKeyID := getEnv("APNS_KEY_ID", "")
 	apnsTeamID := getEnv("APNS_TEAM_ID", "")
 	apnsTopic := getEnv("APNS_TOPIC", "")
@@ -110,12 +113,41 @@ func main() {
 	push.SetDebugLogging(strings.EqualFold(logLevel, "debug"))
 	sender := push.NewMultiSender(expoPushToken)
 
-	// Configure direct APNs if key is available (file path or base64)
-	if apnsKeyID != "" && apnsTeamID != "" && apnsTopic != "" {
+	// Configure direct APNs with either token authentication (.p8) or
+	// certificate authentication (.p12). Exactly one credential type may be
+	// configured so a stale secret cannot silently select the wrong identity.
+	hasAPNsTokenKey := apnsKeyPath != "" || apnsKeyBase64 != ""
+	hasAPNsCertificate := apnsP12Path != "" || apnsP12Base64 != ""
+	if hasAPNsTokenKey && hasAPNsCertificate {
+		log.Fatalf("Configure either APNS_KEY_PATH/APNS_KEY_BASE64 or APNS_P12_PATH/APNS_P12_BASE64, not both")
+	}
+	if hasAPNsTokenKey || hasAPNsCertificate {
+		if apnsTopic == "" {
+			log.Fatalf("APNS_TOPIC is required when APNs delivery is configured")
+		}
 		var apnsSender *push.APNsSender
 		var err error
+		authMode := "certificate"
 
-		if apnsKeyBase64 != "" {
+		if hasAPNsTokenKey {
+			authMode = "token"
+			if apnsKeyID == "" || apnsTeamID == "" {
+				log.Fatalf("APNS_KEY_ID and APNS_TEAM_ID are required for .p8 token authentication")
+			}
+		}
+
+		if apnsP12Base64 != "" {
+			certificateData, decErr := base64.StdEncoding.DecodeString(apnsP12Base64)
+			if decErr != nil {
+				certificateData, decErr = base64.RawStdEncoding.DecodeString(apnsP12Base64)
+				if decErr != nil {
+					log.Fatalf("Failed to decode APNS_P12_BASE64: %v", decErr)
+				}
+			}
+			apnsSender, err = push.NewAPNsSenderFromP12Bytes(certificateData, apnsP12Password, apnsTopic, apnsSandbox)
+		} else if apnsP12Path != "" {
+			apnsSender, err = push.NewAPNsSenderFromP12(apnsP12Path, apnsP12Password, apnsTopic, apnsSandbox)
+		} else if apnsKeyBase64 != "" {
 			// Try standard base64 first, then raw (no padding)
 			keyData, decErr := base64.StdEncoding.DecodeString(apnsKeyBase64)
 			if decErr != nil {
@@ -138,7 +170,7 @@ func main() {
 			if apnsSandbox {
 				env = "sandbox"
 			}
-			log.Printf("  APNs:      enabled (key=%s, team=%s, topic=%s, env=%s)", apnsKeyID, apnsTeamID, apnsTopic, env)
+			log.Printf("  APNs:      enabled (auth=%s, topic=%s, env=%s)", authMode, apnsTopic, env)
 		} else {
 			log.Printf("  APNs:      disabled (no key configured)")
 		}

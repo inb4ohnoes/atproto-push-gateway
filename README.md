@@ -186,6 +186,9 @@ docker run -d \
 | `APNS_KEY_BASE64` | (empty) | Base64-encoded APNs .p8 key (alternative to file path) |
 | `APNS_KEY_ID` | (empty) | APNs Key ID (from Apple Developer Portal) |
 | `APNS_TEAM_ID` | (empty) | Apple Developer Team ID |
+| `APNS_P12_PATH` | (empty) | Path to an Apple Push Services .p12 certificate (alternative to .p8 authentication) |
+| `APNS_P12_BASE64` | (empty) | Base64-encoded APNs .p12 certificate (alternative to file path) |
+| `APNS_P12_PASSWORD` | (empty) | Password for the APNs .p12 certificate |
 | `APNS_TOPIC` | (empty) | APNs topic / iOS bundle ID (e.g. `org.example.app`) |
 | `APNS_SANDBOX` | (empty) | Set to `true` for APNs sandbox (dev/preview builds) |
 | `FCM_SERVICE_ACCOUNT_PATH` | (empty) | Path to Firebase service account JSON (for direct FCM delivery) |

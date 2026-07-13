@@ -15,17 +15,16 @@ Do not expose either container port directly to the internet.
 
 ## Required secrets
 
-- Apple APNs `.p8` key at `deployment/aery/secrets/AuthKey.p8`
-- APNs Key ID
-- Apple Team ID
+- Apple Push Services `.p12` certificate at `deployment/aery/secrets/apns.p12`
 - a long random origin-verification secret injected by Cloudflare
 
-The key and `.env` file are excluded from both Git and the Docker build context.
+The certificate and `.env` file are excluded from both Git and the Docker build context.
 
 ## Install
 
 1. Copy `.env.example` to `.env` and replace every placeholder.
-2. Create `secrets/AuthKey.p8` with mode `0600`.
+2. Create `secrets/apns.p12` with mode `0600`. Set `APNS_P12_PASSWORD`
+   directly in the Compose environment if a future certificate has a password.
 3. Authenticate the VPS to the private or public container registry as needed.
 4. Pull the immutable image and start both services:
 
