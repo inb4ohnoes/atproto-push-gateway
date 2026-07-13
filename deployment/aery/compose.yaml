@@ -1,4 +1,4 @@
-version: "3.8"
+version: "3.7"
 
 x-gateway: &gateway
   image: ${AERY_PUSH_IMAGE:?Set AERY_PUSH_IMAGE to an immutable image tag}
