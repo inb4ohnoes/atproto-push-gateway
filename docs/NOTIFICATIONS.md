@@ -31,7 +31,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.subject.uri` → authority part → `did:plc:bob`
 
-**Body template:** `"%s liked your post: %s"` when text is available, otherwise `"%s liked your post"`.
+**Title template:** `"%s liked your post"`.
+
+**Body template:** The liked post text when available, otherwise `"Open Aery to view your post."`.
 
 **Push Payload:**
 ```json

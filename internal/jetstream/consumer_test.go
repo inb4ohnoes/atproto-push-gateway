@@ -298,9 +298,9 @@ func TestFormatNotification(t *testing.T) {
 		wantTitle   string
 		wantBody    string
 	}{
-		{"like with display name", "like", "Alice", "alice.test", "", "New like", "Alice liked your post"},
-		{"like falls back to handle", "like", "", "alice.test", "", "New like", "alice.test liked your post"},
-		{"like falls back to Someone", "like", "", "", "", "New like", "Someone liked your post"},
+		{"like with display name", "like", "Alice", "alice.test", "", "Alice liked your post", "Open Aery to view your post."},
+		{"like falls back to handle", "like", "", "alice.test", "", "alice.test liked your post", "Open Aery to view your post."},
+		{"like falls back to Someone", "like", "", "", "", "Someone liked your post", "Open Aery to view your post."},
 		{"repost", "repost", "Alice", "", "", "New repost", "Alice reposted your post"},
 		{"reply without text", "reply", "Alice", "", "", "New reply", "Alice replied to your post"},
 		{"reply with text", "reply", "Alice", "", "Great post!", "New reply", "Alice replied: Great post!"},
@@ -308,7 +308,7 @@ func TestFormatNotification(t *testing.T) {
 		{"mention with text", "mention", "Alice", "", "Hey @bob check this", "New mention", "Alice mentioned you: Hey @bob check this"},
 		{"quote without text", "quote", "Alice", "", "", "New quote", "Alice quoted your post"},
 		{"quote with text", "quote", "Alice", "", "This is so true!", "New quote", "Alice quoted your post: This is so true!"},
-		{"like with text", "like", "Alice", "", "Cool post", "New like", "Alice liked your post: Cool post"},
+		{"like with text", "like", "Alice", "", "Cool post", "Alice liked your post", "Cool post"},
 		{"repost with text", "repost", "Alice", "", "Cool post", "New repost", "Alice reposted your post: Cool post"},
 		{"follow ignores postText", "follow", "Alice", "", "ignored", "New follower", "Alice followed you"},
 		{"follow", "follow", "Alice", "", "", "New follower", "Alice followed you"},
