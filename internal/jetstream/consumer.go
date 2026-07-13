@@ -706,6 +706,14 @@ func formatNotification(reason, actorDisplayName, actorHandle, postText string) 
 		actorName = "Someone"
 	}
 
+	if reason == "like" {
+		title = fmt.Sprintf("%s liked your post", actorName)
+		if postText != "" {
+			return title, postText
+		}
+		return title, "Open Aery to view your post."
+	}
+
 	if postText != "" {
 		if tmpl, ok := reasonBodyTemplatesWithText[reason]; ok {
 			return title, fmt.Sprintf(tmpl, actorName, postText)

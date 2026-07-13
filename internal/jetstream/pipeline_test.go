@@ -92,7 +92,7 @@ func TestHandleCommit_LikeNotifiesRegisteredTarget(t *testing.T) {
 	if n.Data["recipientDid"] != "did:plc:bob" || n.Data["actorDid"] != "did:plc:alice" {
 		t.Errorf("unexpected recipient/actor: %q / %q", n.Data["recipientDid"], n.Data["actorDid"])
 	}
-	if n.Title != "New like" || n.Body != "Someone liked your post" {
+	if n.Title != "Someone liked your post" || n.Body != "Open Aery to view your post." {
 		t.Errorf("unexpected title/body: %q / %q", n.Title, n.Body)
 	}
 	if c.GetStats().MatchedEvents != 1 {
