@@ -29,9 +29,13 @@ The certificate and `.env` file are excluded from both Git and the Docker build 
 4. Pull the immutable image and start both services:
 
    ```sh
-   docker compose --env-file .env -f compose.yaml pull
-   docker compose --env-file .env -f compose.yaml up -d
+   docker compose -p aery-atproto-push --env-file .env -f compose.yaml pull
+   docker compose -p aery-atproto-push --env-file .env -f compose.yaml up -d
    ```
+
+   On Ubuntu 20.04 hosts with standalone Compose, replace `docker compose`
+   with `docker-compose`. Compose 1.25 does not support `--env-file`, so export
+   the variables from `.env` before running it.
 
 5. Configure the reverse proxy and Cloudflare before attempting registration.
 6. Verify both health endpoints locally and through their public hostnames.
