@@ -35,14 +35,14 @@ The gateway:
 
 | Event | Default Title | Default Body |
 |---|---|---|
-| Like | New like | X liked your post *(or `X liked your post: <post text>` when text is available)* |
-| Repost | New repost | X reposted your post *(or `X reposted your post: <post text>`)* |
-| Reply | New reply | X replied to your post *(or `X replied: <post text>`)* |
-| Mention | New mention | X mentioned you *(or `X mentioned you: <post text>`)* |
-| Quote | New quote | X quoted your post *(or `X quoted your post: <post text>`)* |
-| Follow | New follower | X followed you |
-| Like via repost | New like | X liked a post you reposted *(or `…: <post text>`)* |
-| Repost via repost | New repost | X reposted a post you reposted *(or `…: <post text>`)* |
+| Like | X liked your post | Post text, when available |
+| Repost | X reposted your post | Post text, when available |
+| Reply | X replied to your post | Reply text |
+| Mention | X mentioned you | Mentioning post text |
+| Quote | X quoted your post | Quote post text |
+| Follow | X followed you | Open Aery to view their profile |
+| Like via repost | X liked a post you reposted | Post text, when available |
+| Repost via repost | X reposted a post you reposted | Post text, when available |
 | Verified | Verified | Your account has been verified |
 | Unverified | Verification removed | Your account verification was removed |
 
@@ -53,8 +53,8 @@ The gateway sends English `title` and `body` as defaults, plus structured `data`
 ```json
 {
   "to": "ExponentPushToken[...]",
-  "title": "New like",
-  "body": "Alice liked your post",
+  "title": "Alice liked your post",
+  "body": "Hello world",
   "sound": "default",
   "mutableContent": true,
   "data": {

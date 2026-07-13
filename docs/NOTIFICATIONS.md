@@ -33,7 +33,7 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Title template:** `"%s liked your post"`.
 
-**Body template:** The liked post text when available, otherwise `"Open Aery to view your post."`.
+**Body template:** The liked post text when available, otherwise `"Open Aery to view it."`.
 
 **Push Payload:**
 ```json
@@ -82,7 +82,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.subject.uri` → authority part → `did:plc:bob`
 
-**Body template:** `"%s reposted your post: %s"` when text is available, otherwise `"%s reposted your post"`.
+**Title template:** `"%s reposted your post"`.
+
+**Body template:** The reposted post text when available, otherwise `"Open Aery to view it."`.
 
 **Push Payload:**
 ```json
@@ -138,7 +140,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.reply.parent.uri` → authority part → `did:plc:bob`
 
-**Body template:** `"%s replied: %s"` (e.g. `"Alice replied: Great post!"`). Without text, falls back to `"%s replied to your post"`.
+**Title template:** `"%s replied to your post"`.
+
+**Body template:** The reply text when available, otherwise `"Open Aery to view it."`.
 
 **Push Payload:**
 ```json
@@ -191,7 +195,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.facets[].features[]` where `$type === "app.bsky.richtext.facet#mention"` → `did` field
 
-**Body template:** `"%s mentioned you: %s"` (e.g. `"Alice mentioned you: Hey @bob check this out"`). Without text, falls back to `"%s mentioned you"`.
+**Title template:** `"%s mentioned you"`.
+
+**Body template:** The mentioning post text when available, otherwise `"Open Aery to view it."`.
 
 **Push Payload:**
 ```json
@@ -245,7 +251,9 @@ Note: For mentions, `uri` is the mentioning post (actor's post) and there is no 
 
 **Target DID extraction:** `record.embed.record.uri` → authority part → `did:plc:bob`
 
-**Body template:** `"%s quoted your post: %s"` (e.g. `"Alice quoted your post: This is so true!"`). Without text, falls back to `"%s quoted your post"`.
+**Title template:** `"%s quoted your post"`.
+
+**Body template:** The quote post text when available, otherwise `"Open Aery to view it."`.
 
 **Push Payload:**
 ```json
