@@ -1,0 +1,73 @@
+name: aery-atproto-push
+
+x-gateway: &gateway
+  image: ${AERY_PUSH_IMAGE:?Set AERY_PUSH_IMAGE to an immutable image tag}
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=16m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  environment: &common-environment
+    PUSH_GATEWAY_PORT: "8080"
+    JETSTREAM_URL: ${AERY_JETSTREAM_URL:?Set AERY_JETSTREAM_URL}
+    APNS_KEY_PATH: /run/secrets/aery_apns_key
+    APNS_KEY_ID: ${AERY_APNS_KEY_ID:?Set AERY_APNS_KEY_ID}
+    APNS_TEAM_ID: ${AERY_APNS_TEAM_ID:?Set AERY_APNS_TEAM_ID}
+    APNS_TOPIC: ${AERY_APNS_TOPIC:-ninja.probably.Aery}
+    ORIGIN_VERIFY_SECRET: ${AERY_ORIGIN_VERIFY_SECRET:?Set AERY_ORIGIN_VERIFY_SECRET}
+    ORIGIN_VERIFY_HEADER_NAME: X-Origin-Verify
+    ORIGIN_VERIFY_EXCLUDE_HEALTH: "true"
+    ORIGIN_VERIFY_EXCLUDE_DID_JSON: "false"
+    DEV_MODE: "false"
+    LOG_LEVEL: info
+    PUSH_POST_TEXT_FETCH: "true"
+  secrets:
+    - aery_apns_key
+  healthcheck:
+    test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 15s
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "5"
+
+services:
+  production:
+    <<: *gateway
+    ports:
+      - 127.0.0.1:${AERY_PUSH_PRODUCTION_PORT:-18081}:8080
+    volumes:
+      - production-data:/data
+    environment:
+      <<: *common-environment
+      PUSH_GATEWAY_DID: did:web:bsky-push.getaery.app
+      SQLITE_PATH: /data/push-gateway.db
+      APNS_SANDBOX: "false"
+
+  development:
+    <<: *gateway
+    ports:
+      - 127.0.0.1:${AERY_PUSH_DEVELOPMENT_PORT:-18082}:8080
+    volumes:
+      - development-data:/data
+    environment:
+      <<: *common-environment
+      PUSH_GATEWAY_DID: did:web:bsky-push-dev.getaery.app
+      SQLITE_PATH: /data/push-gateway.db
+      APNS_SANDBOX: "true"
+
+volumes:
+  production-data:
+  development-data:
+
+secrets:
+  aery_apns_key:
+    file: ./secrets/AuthKey.p8
