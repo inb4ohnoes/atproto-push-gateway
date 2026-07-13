@@ -641,21 +641,13 @@ func (c *Consumer) handleVerificationDelete(verifierDID string, rkey string) {
 // reasonTitles maps notification reasons to English titles.
 // Clients can use the data fields to format localized text instead.
 var reasonTitles = map[string]string{
-	"like":              "New like",
-	"repost":            "New repost",
-	"reply":             "New reply",
-	"mention":           "New mention",
-	"quote":             "New quote",
-	"follow":            "New follower",
-	"like-via-repost":   "New like",
-	"repost-via-repost": "New repost",
-	"verified":          "Verified",
-	"unverified":        "Verification removed",
+	"verified":   "Verified",
+	"unverified": "Verification removed",
 }
 
-// reasonBodyTemplates maps notification reasons to English body templates.
-// %s is replaced with the actor's display name or handle.
-var reasonBodyTemplates = map[string]string{
+// reasonActionTemplates maps social notification reasons to English title
+// templates. %s is replaced with the actor's display name or handle.
+var reasonActionTemplates = map[string]string{
 	"like":              "%s liked your post",
 	"repost":            "%s reposted your post",
 	"reply":             "%s replied to your post",
@@ -664,21 +656,6 @@ var reasonBodyTemplates = map[string]string{
 	"follow":            "%s followed you",
 	"like-via-repost":   "%s liked a post you reposted",
 	"repost-via-repost": "%s reposted a post you reposted",
-	"verified":          "Your account has been verified",
-	"unverified":        "Your account verification was removed",
-}
-
-// reasonBodyTemplatesWithText is used when we have the actor's post text
-// (reply/quote/mention). The first %s is the actor name, the second %s
-// is the sanitized + truncated post body.
-var reasonBodyTemplatesWithText = map[string]string{
-	"reply":             "%s replied: %s",
-	"quote":             "%s quoted your post: %s",
-	"mention":           "%s mentioned you: %s",
-	"like":              "%s liked your post: %s",
-	"repost":            "%s reposted your post: %s",
-	"like-via-repost":   "%s liked a post you reposted: %s",
-	"repost-via-repost": "%s reposted a post you reposted: %s",
 }
 
 // reasonFetchesSubjectText reports whether a reason warrants a lazy
@@ -706,30 +683,25 @@ func formatNotification(reason, actorDisplayName, actorHandle, postText string) 
 		actorName = "Someone"
 	}
 
-	if reason == "like" {
-		title = fmt.Sprintf("%s liked your post", actorName)
-		if postText != "" {
+	if actionTemplate, ok := reasonActionTemplates[reason]; ok {
+		title = fmt.Sprintf(actionTemplate, actorName)
+		if postText != "" && reason != "follow" {
 			return title, postText
 		}
-		return title, "Open Aery to view your post."
-	}
-
-	if postText != "" {
-		if tmpl, ok := reasonBodyTemplatesWithText[reason]; ok {
-			return title, fmt.Sprintf(tmpl, actorName, postText)
+		if reason == "follow" {
+			return title, "Open Aery to view their profile."
 		}
+		return title, "Open Aery to view it."
 	}
 
-	template := reasonBodyTemplates[reason]
-	if template == "" {
-		return title, actorName
+	if reason == "verified" {
+		return title, "Your account has been verified"
+	}
+	if reason == "unverified" {
+		return title, "Your account verification was removed"
 	}
 
-	if reason == "verified" || reason == "unverified" {
-		return title, template
-	}
-
-	return title, fmt.Sprintf(template, actorName)
+	return title, actorName
 }
 
 func (c *Consumer) sendNotification(actorDID, targetDID, reason, recordURI, subjectURI, postText string) {
