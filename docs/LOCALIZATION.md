@@ -51,6 +51,6 @@ The Bluesky social-app (`bsky.app`) does **not** localize push notifications eit
 
 ## Field stability
 
-Clients localize against `data.reason` values and the structured author/subject fields. Those identifiers (`like`, `repost`, `reply`, `mention`, `quote`, `follow`, `like-via-repost`, `repost-via-repost`, `verified`, `unverified`) and field names (`actorDid`, `actorDisplayName`, `actorHandle`, `recipientDid`, `uri`, `subject`, `reasonSubject`) are part of the gateway's stable contract — they will not be renamed without a version bump. New reasons will be added with new identifiers; existing ones will not change semantics.
+Clients localize against `data.reason` values and the structured author/subject fields. Those identifiers (`like`, `repost`, `reply`, `mention`, `quote`, `follow`, `like-via-repost`, `repost-via-repost`, `verified`, `unverified`) and field names (`actorDid`, `actorDisplayName`, `actorHandle`, `actorAvatar`, `recipientDid`, `uri`, `subject`, `reasonSubject`) are part of the gateway's stable contract — they will not be renamed without a version bump. New reasons will be added with new identifiers; existing ones will not change semantics.
 
 The English `title` and `body` strings are **not** considered stable. They may be reworded for clarity at any time. Clients that depend on them verbatim (rather than treating them as a fallback) will break.

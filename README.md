@@ -64,7 +64,8 @@ The gateway sends English `title` and `body` as defaults, plus structured `data`
     "recipientDid": "did:plc:bob",
     "actorDid": "did:plc:alice",
     "actorDisplayName": "Alice",
-    "actorHandle": "alice.bsky.social"
+    "actorHandle": "alice.bsky.social",
+    "actorAvatar": "https://cdn.bsky.app/img/avatar/plain/did:plc:alice/example@jpeg"
   }
 }
 ```
@@ -78,6 +79,7 @@ The gateway sends English `title` and `body` as defaults, plus structured `data`
 | `actorDid` | DID of the actor who performed the action |
 | `actorDisplayName` | Actor's display name (may be empty) |
 | `actorHandle` | Actor's handle (may be empty) |
+| `actorAvatar` | HTTPS URL for the actor's avatar (may be empty) |
 | `reasonSubject` | Post text for `reply`, `quote`, `mention` (inline from Jetstream) and for `like`, `repost`, `like-via-repost`, `repost-via-repost` (lazy-fetched via AppView, cached). Sanitized, truncated to `PUSH_POST_TEXT_MAX_GRAPHEMES`. Omitted on fetch miss / error or when `PUSH_POST_TEXT_FETCH=false` — see [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md#post-text-limits). |
 
 ## Quick Start
