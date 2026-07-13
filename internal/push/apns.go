@@ -3,6 +3,7 @@ package push
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 // APNsSender sends push notifications directly via Apple Push Notification service.
@@ -43,6 +45,59 @@ func NewAPNsSender(keyPath, keyID, teamID, topic string, sandbox bool) (*APNsSen
 // NewAPNsSenderFromBytes creates a sender from PEM-encoded key bytes.
 func NewAPNsSenderFromBytes(keyData []byte, keyID, teamID, topic string, sandbox bool) (*APNsSender, error) {
 	return newAPNsSenderFromBytes(keyData, keyID, teamID, topic, sandbox)
+}
+
+// NewAPNsSenderFromP12 creates a certificate-authenticated APNs sender from a
+// PKCS#12 file. Apple Push Services certificates can be used with both APNs
+// endpoints; sandbox selects only the destination endpoint.
+func NewAPNsSenderFromP12(path, password, topic string, sandbox bool) (*APNsSender, error) {
+	p12Data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read APNs PKCS#12 file: %w", err)
+	}
+	return NewAPNsSenderFromP12Bytes(p12Data, password, topic, sandbox)
+}
+
+// NewAPNsSenderFromP12Bytes creates a certificate-authenticated APNs sender
+// from PKCS#12 bytes.
+func NewAPNsSenderFromP12Bytes(p12Data []byte, password, topic string, sandbox bool) (*APNsSender, error) {
+	privateKey, certificate, caCertificates, err := pkcs12.DecodeChain(p12Data, password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode APNs PKCS#12 data: %w", err)
+	}
+
+	certificateChain := make([][]byte, 0, 1+len(caCertificates))
+	certificateChain = append(certificateChain, certificate.Raw)
+	for _, caCertificate := range caCertificates {
+		certificateChain = append(certificateChain, caCertificate.Raw)
+	}
+
+	tlsCertificate := tls.Certificate{
+		Certificate: certificateChain,
+		PrivateKey:  privateKey,
+		Leaf:        certificate,
+	}
+
+	baseURL := "https://api.push.apple.com"
+	if sandbox {
+		baseURL = "https://api.sandbox.push.apple.com"
+	}
+
+	return &APNsSender{
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				ForceAttemptHTTP2: true,
+				TLSClientConfig: &tls.Config{
+					MinVersion:   tls.VersionTLS12,
+					Certificates: []tls.Certificate{tlsCertificate},
+				},
+			},
+		},
+		topic:   topic,
+		sandbox: sandbox,
+		baseURL: baseURL,
+	}, nil
 }
 
 func newAPNsSenderFromBytes(keyData []byte, keyID, teamID, topic string, sandbox bool) (*APNsSender, error) {
@@ -126,11 +181,6 @@ type apnsAlert struct {
 }
 
 func (a *APNsSender) Send(n Notification) error {
-	token, err := a.getToken()
-	if err != nil {
-		return err
-	}
-
 	payload := apnsPayload{
 		APS: apnsAPS{
 			Alert: apnsAlert{
@@ -154,7 +204,13 @@ func (a *APNsSender) Send(n Notification) error {
 		return err
 	}
 
-	req.Header.Set("Authorization", "bearer "+token)
+	if a.key != nil {
+		token, err := a.getToken()
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "bearer "+token)
+	}
 	req.Header.Set("apns-topic", a.topic)
 	req.Header.Set("apns-push-type", "alert")
 	req.Header.Set("apns-priority", "10")

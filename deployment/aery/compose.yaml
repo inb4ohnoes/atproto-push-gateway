@@ -14,9 +14,8 @@ x-gateway: &gateway
   environment: &common-environment
     PUSH_GATEWAY_PORT: "8080"
     JETSTREAM_URL: ${AERY_JETSTREAM_URL:?Set AERY_JETSTREAM_URL}
-    APNS_KEY_PATH: /run/secrets/aery_apns_key
-    APNS_KEY_ID: ${AERY_APNS_KEY_ID:?Set AERY_APNS_KEY_ID}
-    APNS_TEAM_ID: ${AERY_APNS_TEAM_ID:?Set AERY_APNS_TEAM_ID}
+    APNS_P12_PATH: /run/secrets/aery_apns_certificate
+    APNS_P12_PASSWORD: ""
     APNS_TOPIC: ${AERY_APNS_TOPIC:-ninja.probably.Aery}
     ORIGIN_VERIFY_SECRET: ${AERY_ORIGIN_VERIFY_SECRET:?Set AERY_ORIGIN_VERIFY_SECRET}
     ORIGIN_VERIFY_HEADER_NAME: X-Origin-Verify
@@ -26,7 +25,7 @@ x-gateway: &gateway
     LOG_LEVEL: info
     PUSH_POST_TEXT_FETCH: "true"
   secrets:
-    - aery_apns_key
+    - aery_apns_certificate
   healthcheck:
     test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
     interval: 30s
@@ -69,5 +68,5 @@ volumes:
   development-data:
 
 secrets:
-  aery_apns_key:
-    file: ./secrets/AuthKey.p8
+  aery_apns_certificate:
+    file: ./secrets/apns.p12

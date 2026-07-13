@@ -12,6 +12,10 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/klauspost/compress v1.17.11
 	golang.org/x/oauth2 v0.36.0
+	software.sslmate.com/src/go-pkcs12 v0.7.3
 )
 
-require cloud.google.com/go/compute/metadata v0.3.0 // indirect
+require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
+	golang.org/x/crypto v0.11.0 // indirect
+)

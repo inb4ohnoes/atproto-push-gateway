@@ -5,9 +5,11 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -15,6 +17,7 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 func testNotification(token, platform string) Notification {
@@ -145,6 +148,82 @@ func TestNewAPNsSender_SandboxBaseURL(t *testing.T) {
 	}
 	if a.baseURL != "https://api.push.apple.com" {
 		t.Errorf("expected production base URL, got %q", a.baseURL)
+	}
+}
+
+func newTestAPNsP12(t *testing.T, password string) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "Apple Push Services: org.example.app"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	certificateDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificate, err := x509.ParseCertificate(certificateDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p12Data, err := pkcs12.Encode(rand.Reader, key, certificate, nil, password)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p12Data
+}
+
+func TestNewAPNsSenderFromP12Bytes(t *testing.T) {
+	a, err := NewAPNsSenderFromP12Bytes(newTestAPNsP12(t, "secret"), "secret", "org.example.app", true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.key != nil {
+		t.Error("certificate-authenticated sender must not create a token key")
+	}
+	if a.baseURL != "https://api.sandbox.push.apple.com" {
+		t.Errorf("expected sandbox base URL, got %q", a.baseURL)
+	}
+	transport, ok := a.client.Transport.(*http.Transport)
+	if !ok || transport.TLSClientConfig == nil || len(transport.TLSClientConfig.Certificates) != 1 {
+		t.Fatal("expected an HTTP/2 transport with one client certificate")
+	}
+}
+
+func TestNewAPNsSenderFromP12Bytes_RejectsBadInput(t *testing.T) {
+	if _, err := NewAPNsSenderFromP12Bytes([]byte("not p12"), "", "topic", false); err == nil {
+		t.Error("expected invalid PKCS#12 data to fail")
+	}
+	if _, err := NewAPNsSenderFromP12Bytes(newTestAPNsP12(t, "secret"), "wrong", "topic", false); err == nil {
+		t.Error("expected an incorrect password to fail")
+	}
+}
+
+func TestAPNsSend_CertificateAuthOmitsAuthorizationHeader(t *testing.T) {
+	var gotAuthorization string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuthorization = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	a, err := NewAPNsSenderFromP12Bytes(newTestAPNsP12(t, ""), "", "org.example.app", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	a.baseURL = srv.URL
+	if err := a.Send(testNotification("d1f2e3", "ios")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotAuthorization != "" {
+		t.Errorf("certificate authentication must omit the bearer token, got %q", gotAuthorization)
 	}
 }
 
