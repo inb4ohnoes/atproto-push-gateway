@@ -100,6 +100,9 @@ With `DEV_MODE=true`, the server binds to `127.0.0.1` by default. Set `DEV_MODE_
 The gateway starts on port 8080 and serves:
 - `POST /xrpc/app.bsky.notification.registerPush` — Token registration
 - `POST /xrpc/app.bsky.notification.unregisterPush` — Token removal
+- `POST /xrpc/app.getaery.notification.enrollChat` — Service-authenticated DM push enrollment
+- `POST /xrpc/app.getaery.notification.revokeChat` — Idempotent DM push revocation
+- `GET /xrpc/app.getaery.notification.getChatEnrollment` — Service-authenticated enrollment state
 - `GET /.well-known/did.json` — DID document for service discovery
 - `GET /health` — Health check with stats
 
@@ -180,6 +183,7 @@ docker run -d \
 | `PUSH_GATEWAY_DID` | `did:web:localhost` | Your service DID (e.g. `did:web:push.example.org`). Must be a `did:web:` DID. |
 | `PUSH_GATEWAY_PORT` | `8080` | HTTP server port |
 | `SQLITE_PATH` | `./push-gateway.db` | Path to SQLite database file |
+| `DM_CREDENTIAL_ENCRYPTION_KEY` | (empty) | Base64-encoded 32-byte AES key used to encrypt app passwords and cached chat session tokens at rest. DM enrollment is disabled when unset. |
 | `JETSTREAM_URL` | `wss://jetstream2.us-east.bsky.network/subscribe` | Jetstream WebSocket URL |
 | `EXPO_PUSH_ACCESS_TOKEN` | (empty) | Expo Push API access token |
 | `DEV_MODE` | (empty) | Set to `true` to enable test endpoints and allow the `X-Actor-DID` header to bypass JWT verification for local testing |
@@ -215,7 +219,7 @@ docker run -d \
 |---|---|---|
 | Dev mode binding | `127.0.0.1:$PUSH_GATEWAY_PORT` | Applies when `DEV_MODE=true`. Set `DEV_MODE_ALLOW_PUBLIC=true` to bind publicly in dev mode. |
 | HTTP server | `ReadHeaderTimeout=10s`, `ReadTimeout=30s`, `WriteTimeout=30s`, `IdleTimeout=120s`, `MaxHeaderBytes=64 KiB` | Protects against slow or oversized requests. |
-| XRPC body size | `64 KiB` | Applies to `registerPush` and `unregisterPush`. |
+| XRPC body size | `64 KiB` push registration; `16 KiB` chat enrollment | Oversized bodies are rejected before decoding. |
 | Token / app ID size | `token <= 2048`, `appId <= 256` | Oversized values are rejected with `400`. |
 | JWT checks | `aud` must equal `PUSH_GATEWAY_DID`, `lxm` must match the called XRPC method, `exp` is required and may be at most `5m` in the future, only `ES256` / `ES256K` are accepted | The JSON body `serviceDid` must also match this gateway. |
 | DID resolution | `10s` HTTP timeout, `5s` DNS timeout, `3` redirects max, `256 KiB` document cap, cache capped at `DID_CACHE_SIZE` | `did:web` resolution refuses localhost, loopback, private, link-local, CGNAT, and IMDS-style targets. |

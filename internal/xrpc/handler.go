@@ -44,8 +44,11 @@ type RegisterPushRequest struct {
 }
 
 const (
-	lexiconRegisterPush   = "app.bsky.notification.registerPush"
-	lexiconUnregisterPush = "app.bsky.notification.unregisterPush"
+	lexiconRegisterPush      = "app.bsky.notification.registerPush"
+	lexiconUnregisterPush    = "app.bsky.notification.unregisterPush"
+	lexiconEnrollChat        = "app.getaery.notification.enrollChat"
+	lexiconRevokeChat        = "app.getaery.notification.revokeChat"
+	lexiconGetChatEnrollment = "app.getaery.notification.getChatEnrollment"
 )
 
 // StatsProvider returns jetstream stats for the health endpoint.
@@ -59,6 +62,7 @@ type Handler struct {
 	statsProvider     StatsProvider
 	didResolver       DIDResolver
 	onTokenRegistered func()
+	chatEnrollment    ChatEnrollmentManager
 }
 
 func NewHandler(s *store.Store, devMode bool, serviceDID string, sp StatsProvider, onTokenRegistered func()) *Handler {
@@ -75,11 +79,18 @@ func (h *Handler) SetDIDResolver(r DIDResolver) {
 	h.didResolver = r
 }
 
+func (h *Handler) SetChatEnrollmentManager(manager ChatEnrollmentManager) {
+	h.chatEnrollment = manager
+}
+
 func (h *Handler) RegisterRoutes(mux *http.ServeMux, serviceDID string) {
 	mux.HandleFunc("POST /xrpc/"+lexiconRegisterPush, h.handleRegisterPush)
 	mux.HandleFunc("POST /xrpc/"+lexiconUnregisterPush, h.handleUnregisterPush)
 	mux.HandleFunc("GET /xrpc/"+lexiconRegisterPush, methodNotAllowed)
 	mux.HandleFunc("GET /xrpc/"+lexiconUnregisterPush, methodNotAllowed)
+	mux.HandleFunc("POST /xrpc/"+lexiconEnrollChat, h.handleEnrollChat)
+	mux.HandleFunc("POST /xrpc/"+lexiconRevokeChat, h.handleRevokeChat)
+	mux.HandleFunc("GET /xrpc/"+lexiconGetChatEnrollment, h.handleGetChatEnrollment)
 
 	// DID Document
 	mux.HandleFunc("GET /.well-known/did.json", func(w http.ResponseWriter, r *http.Request) {
