@@ -62,6 +62,7 @@ func main() {
 	postTextFetch := getEnv("PUSH_POST_TEXT_FETCH", "true") == "true"
 	postTextCacheSize := getEnvInt64("PUSH_POST_TEXT_CACHE_SIZE", 10000)
 	dmCredentialKeyBase64 := getEnv("DM_CREDENTIAL_ENCRYPTION_KEY", "")
+	chatPollIntervalSeconds := getEnvInt64("CHAT_POLL_INTERVAL_SECONDS", 15)
 
 	// Origin-verify shared-secret middleware (AWS CloudFront / Cloudflare
 	// custom-header pattern). When ORIGIN_VERIFY_SECRET is empty the
@@ -237,6 +238,7 @@ func main() {
 	// Initialize HTTP server
 	mux := http.NewServeMux()
 	handler := xrpc.NewHandler(s, devMode, serviceDID, func() interface{} { return consumer.GetStats() }, consumer.NotifyTokenRegistered)
+	var chatCoordinator *chat.Coordinator
 	if dmCredentialKeyBase64 != "" {
 		dmCredentialKey, err := base64.StdEncoding.DecodeString(dmCredentialKeyBase64)
 		if err != nil {
@@ -250,7 +252,11 @@ func main() {
 			log.Fatalf("Failed to initialize DM credential manager: %v", err)
 		}
 		handler.SetChatEnrollmentManager(chatManager)
-		log.Printf("  DM push:   enrollment enabled")
+		chatPoller := chat.NewPoller(s, chatManager, chat.NewClient(nil), sender)
+		chatCoordinator = chat.NewCoordinator(s, chatPoller, time.Duration(chatPollIntervalSeconds)*time.Second)
+		chatManager.SetEnrollmentChangedCallback(chatCoordinator.NotifyEnrollmentChanged)
+		go chatCoordinator.Run()
+		log.Printf("  DM push:   enabled (poll interval=%ds)", chatPollIntervalSeconds)
 	} else {
 		log.Printf("  DM push:   disabled (no credential encryption key configured)")
 	}
@@ -310,6 +316,9 @@ func main() {
 
 	// Stop Jetstream consumer
 	consumer.Stop()
+	if chatCoordinator != nil {
+		chatCoordinator.Stop()
+	}
 
 	// Gracefully shutdown HTTP server with a 10-second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

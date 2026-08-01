@@ -184,6 +184,7 @@ docker run -d \
 | `PUSH_GATEWAY_PORT` | `8080` | HTTP server port |
 | `SQLITE_PATH` | `./push-gateway.db` | Path to SQLite database file |
 | `DM_CREDENTIAL_ENCRYPTION_KEY` | (empty) | Base64-encoded 32-byte AES key used to encrypt app passwords and cached chat session tokens at rest. DM enrollment is disabled when unset. |
+| `CHAT_POLL_INTERVAL_SECONDS` | `15` | Normal per-account delay between successful `chat.bsky.convo.getLog` polls. Transient errors back off independently up to 60 seconds and honor `Retry-After`. |
 | `JETSTREAM_URL` | `wss://jetstream2.us-east.bsky.network/subscribe` | Jetstream WebSocket URL |
 | `EXPO_PUSH_ACCESS_TOKEN` | (empty) | Expo Push API access token |
 | `DEV_MODE` | (empty) | Set to `true` to enable test endpoints and allow the `X-Actor-DID` header to bypass JWT verification for local testing |
