@@ -17,6 +17,7 @@ import (
 const logCreateMessageType = "chat.bsky.convo.defs#logCreateMessage"
 const deletedMessageType = "chat.bsky.convo.defs#deletedMessageView"
 const directConversationType = "chat.bsky.convo.defs#directConvo"
+const groupConversationType = "chat.bsky.convo.defs#groupConvo"
 
 type AccessTokenProvider interface {
 	AccessToken(context.Context, string) (string, string, error)
@@ -111,7 +112,7 @@ func (p *Poller) filterMessages(ctx context.Context, actorDID, pdsHost, accessJW
 			}
 			conversations[event.ConversationID] = conversation
 		}
-		if conversation.Kind.Type != directConversationType || conversation.Muted {
+		if (conversation.Kind.Type != directConversationType && conversation.Kind.Type != groupConversationType) || conversation.Muted {
 			continue
 		}
 		preference := preferences.Chat

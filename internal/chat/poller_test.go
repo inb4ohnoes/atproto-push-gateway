@@ -111,6 +111,12 @@ func directConversation(id, status string, muted bool, members ...Profile) Conve
 	return conversation
 }
 
+func groupConversation(id, status string, muted bool, members ...Profile) Conversation {
+	conversation := Conversation{ID: id, Status: status, Muted: muted, Members: members}
+	conversation.Kind.Type = groupConversationType
+	return conversation
+}
+
 func newPollerStore(t *testing.T) *store.Store {
 	t.Helper()
 	s, err := store.New(filepath.Join(t.TempDir(), "poller.db"))
@@ -152,18 +158,18 @@ func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T)
 				chatEvent(logCreateMessageType, "accepted", deletedMessageType, "deleted", senderProfile.DID, "deleted text", senderProfile),
 				chatEvent("chat.bsky.convo.defs#logAddMember", "accepted", "chat.bsky.convo.defs#systemMessageView", "system", senderProfile.DID, "system text", senderProfile),
 				chatEvent(logCreateMessageType, "group", "chat.bsky.convo.defs#messageView", "group-message", senderProfile.DID, "group text", senderProfile),
+				chatEvent(logCreateMessageType, "muted-group", "chat.bsky.convo.defs#messageView", "muted-group-message", senderProfile.DID, "muted group text", senderProfile),
+				chatEvent(logCreateMessageType, "group-request", "chat.bsky.convo.defs#messageView", "group-request-message", senderProfile.DID, "group request text", senderProfile),
 				chatEvent(logCreateMessageType, "request", "chat.bsky.convo.defs#messageView", "request-message", senderProfile.DID, "request text", senderProfile),
 			}},
 			{Cursor: "c3", Logs: []json.RawMessage{chatEvent(logCreateMessageType, "accepted", "chat.bsky.convo.defs#messageView", "m1", senderProfile.DID, "TOP SECRET MESSAGE", senderProfile)}},
 		},
 		conversations: map[string]Conversation{
-			"accepted": directConversation("accepted", "accepted", false, senderProfile),
-			"request":  directConversation("request", "request", false, senderProfile),
-			"group": func() Conversation {
-				conversation := Conversation{ID: "group", Status: "accepted", Members: []Profile{senderProfile}}
-				conversation.Kind.Type = "chat.bsky.convo.defs#groupConvo"
-				return conversation
-			}(),
+			"accepted":      directConversation("accepted", "accepted", false, senderProfile),
+			"request":       directConversation("request", "request", false, senderProfile),
+			"group":         groupConversation("group", "accepted", false, senderProfile),
+			"muted-group":   groupConversation("muted-group", "accepted", true, senderProfile),
+			"group-request": groupConversation("group-request", "request", false, senderProfile),
 		},
 		preferences: Preferences{
 			Chat:        ChatPreference{Include: "all", Push: true},
@@ -183,10 +189,14 @@ func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T)
 			t.Fatal(err)
 		}
 	}
-	if len(sender.notifications) != 1 {
-		t.Fatalf("got %d notifications, want 1", len(sender.notifications))
+	if len(sender.notifications) != 2 {
+		t.Fatalf("got %d notifications, want 2", len(sender.notifications))
 	}
-	notification := sender.notifications[0]
+	notificationsByMessageID := make(map[string]push.Notification)
+	for _, notification := range sender.notifications {
+		notificationsByMessageID[notification.Data["messageId"]] = notification
+	}
+	notification := notificationsByMessageID["m1"]
 	if notification.Data["reason"] != "chat" || notification.Data["convoId"] != "accepted" || notification.Data["messageId"] != "m1" {
 		t.Fatalf("unexpected payload: %#v", notification.Data)
 	}
@@ -196,8 +206,16 @@ func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T)
 	if notification.Title != "✉️ Sender (@sender.test)" || notification.Body != "TOP SECRET MESSAGE" {
 		t.Fatalf("unexpected notification presentation: title=%q body=%q", notification.Title, notification.Body)
 	}
-	encodedData, _ := json.Marshal(notification.Data)
-	if bytes.Contains(encodedData, []byte("TOP SECRET MESSAGE")) || bytes.Contains(logs.Bytes(), []byte("TOP SECRET MESSAGE")) {
+	groupNotification := notificationsByMessageID["group-message"]
+	if groupNotification.Data["convoId"] != "group" || groupNotification.Title != "✉️ Sender (@sender.test)" || groupNotification.Body != "group text" {
+		t.Fatalf("unexpected group notification: %#v", groupNotification)
+	}
+	customData := make([]map[string]string, 0, len(sender.notifications))
+	for _, delivered := range sender.notifications {
+		customData = append(customData, delivered.Data)
+	}
+	encodedData, _ := json.Marshal(customData)
+	if bytes.Contains(encodedData, []byte("TOP SECRET MESSAGE")) || bytes.Contains(encodedData, []byte("group text")) || bytes.Contains(logs.Bytes(), []byte("TOP SECRET MESSAGE")) || bytes.Contains(logs.Bytes(), []byte("group text")) {
 		t.Fatal("message text reached custom payload data or a log")
 	}
 	pending, err := s.GetPendingChatMessages("did:plc:me")

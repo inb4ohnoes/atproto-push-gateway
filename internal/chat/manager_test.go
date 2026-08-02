@@ -37,12 +37,14 @@ func newTestManager(t *testing.T, handler http.Handler) (*Manager, *store.Store,
 
 func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 	var sawProxy bool
+	var sawUnexpectedQuery bool
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/xrpc/com.atproto.server.createSession":
 			_ = json.NewEncoder(w).Encode(session{DID: "did:plc:alice", AccessJWT: testJWT(time.Now().Add(time.Hour)), RefreshJWT: "refresh-secret"})
 		case "/xrpc/chat.bsky.convo.getLog":
 			sawProxy = r.Header.Get("atproto-proxy") == chatProxy
+			sawUnexpectedQuery = r.URL.RawQuery != ""
 			w.WriteHeader(http.StatusOK)
 		default:
 			http.NotFound(w, r)
@@ -54,6 +56,9 @@ func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 	}
 	if !sawProxy {
 		t.Fatal("chat scope check did not use the required atproto-proxy header")
+	}
+	if sawUnexpectedQuery {
+		t.Fatal("chat scope check sent parameters that getLog does not support")
 	}
 	enrollment, found, err := s.GetDMEnrollment("did:plc:alice")
 	if err != nil || !found {

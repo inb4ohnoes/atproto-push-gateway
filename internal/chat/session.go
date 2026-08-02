@@ -109,7 +109,7 @@ func decodeSession(reader io.Reader, actorDID string) (session, error) {
 }
 
 func (c *sessionClient) checkDMAccess(ctx context.Context, pdsHost, accessJWT string) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, pdsHost+"/xrpc/chat.bsky.convo.getLog?limit=1", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, pdsHost+"/xrpc/chat.bsky.convo.getLog", nil)
 	if err != nil {
 		return err
 	}
