@@ -124,6 +124,21 @@ func newPollerStore(t *testing.T) *store.Store {
 	return s
 }
 
+func TestFindProfileMergesSparseSources(t *testing.T) {
+	related := Profile{DID: "did:plc:sender", DisplayName: "Sender"}
+	member := Profile{
+		DID:    "did:plc:sender",
+		Handle: "sender.test",
+		Avatar: "https://example.com/avatar.jpg",
+	}
+	member.Viewer.Following = "at://did:plc:me/app.bsky.graph.follow/1"
+
+	got := findProfile("did:plc:sender", []Profile{related}, []Profile{member})
+	if got.DisplayName != "Sender" || got.Handle != "sender.test" || got.Avatar != member.Avatar || got.Viewer.Following != member.Viewer.Following {
+		t.Fatalf("profile fields were not merged: %#v", got)
+	}
+}
+
 func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T) {
 	s := newPollerStore(t)
 	senderProfile := Profile{DID: "did:plc:sender", Handle: "sender.test", DisplayName: "Sender", Avatar: "https://example.com/avatar.jpg"}
@@ -178,7 +193,7 @@ func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T)
 	if _, exists := notification.Data["uri"]; exists {
 		t.Fatal("chat payload must not invent an AT URI")
 	}
-	if notification.Title != "Sender messaged you" || notification.Body != "TOP SECRET MESSAGE" {
+	if notification.Title != "💬 Sender (@sender.test)" || notification.Body != "TOP SECRET MESSAGE" {
 		t.Fatalf("unexpected notification presentation: title=%q body=%q", notification.Title, notification.Body)
 	}
 	encodedData, _ := json.Marshal(notification.Data)

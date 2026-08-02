@@ -108,7 +108,7 @@ func TestHandleCommit_LikeNotifiesRegisteredTarget(t *testing.T) {
 	if n.Data["actorAvatar"] != "https://cdn.example/alice.jpg" {
 		t.Errorf("unexpected actor avatar %q", n.Data["actorAvatar"])
 	}
-	if n.Title != "Alice liked your post" || n.Body != "Open Aery to view it." {
+	if n.Title != "❤️ Alice (@alice.test)" || n.Body != "Liked a post" {
 		t.Errorf("unexpected title/body: %q / %q", n.Title, n.Body)
 	}
 	if c.GetStats().MatchedEvents != 1 {
@@ -304,7 +304,7 @@ func TestHandleCommit_VerificationCreateAndDelete(t *testing.T) {
 	if len(sent) != 1 || sent[0].Data["reason"] != "verified" {
 		t.Fatalf("expected verified notification, got %+v", sent)
 	}
-	if sent[0].Body != "Your account has been verified" {
+	if sent[0].Body != "Verified your account" {
 		t.Errorf("unexpected body %q", sent[0].Body)
 	}
 

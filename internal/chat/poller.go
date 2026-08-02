@@ -140,14 +140,26 @@ func (p *Poller) filterMessages(ctx context.Context, actorDID, pdsHost, accessJW
 }
 
 func findProfile(actorDID string, profileLists ...[]Profile) Profile {
+	result := Profile{DID: actorDID}
 	for _, profiles := range profileLists {
 		for _, profile := range profiles {
 			if profile.DID == actorDID {
-				return profile
+				if result.Handle == "" {
+					result.Handle = profile.Handle
+				}
+				if result.DisplayName == "" {
+					result.DisplayName = profile.DisplayName
+				}
+				if result.Avatar == "" {
+					result.Avatar = profile.Avatar
+				}
+				if result.Viewer.Following == "" {
+					result.Viewer.Following = profile.Viewer.Following
+				}
 			}
 		}
 	}
-	return Profile{DID: actorDID}
+	return result
 }
 
 func (p *Poller) deliverPending(actorDID string) error {
@@ -167,13 +179,6 @@ func (p *Poller) deliverPending(actorDID string) error {
 		if body == "" {
 			body = "Open Aery to view it."
 		}
-		senderName := strings.TrimSpace(message.ActorDisplayName)
-		if senderName == "" {
-			senderName = strings.TrimSpace(message.ActorHandle)
-		}
-		if senderName == "" {
-			senderName = "Someone"
-		}
 		tokens, err := p.store.GetTokensForDID(actorDID)
 		if err != nil {
 			return err
@@ -189,7 +194,7 @@ func (p *Poller) deliverPending(actorDID string) error {
 			}
 			notification := push.Notification{
 				Token: token.PushToken, Platform: token.Platform,
-				Title: senderName + " messaged you", Body: body,
+				Title: formatChatActorTitle(message.ActorDisplayName, message.ActorHandle), Body: body,
 				Data: map[string]string{
 					"reason": "chat", "recipientDid": message.RecipientDID,
 					"actorDid": message.ActorDID, "convoId": message.ConversationID,
@@ -225,6 +230,23 @@ func chatNotificationBody(text string) string {
 		return string(runes[:300]) + "…"
 	}
 	return text
+}
+
+func formatChatActorTitle(displayName, handle string) string {
+	displayName = strings.TrimSpace(displayName)
+	handle = strings.TrimPrefix(strings.TrimSpace(handle), "@")
+	if displayName == "" && handle == "" {
+		displayName = "Someone"
+	}
+	label := displayName
+	if handle != "" {
+		if label == "" {
+			label = "@" + handle
+		} else {
+			label += " (@" + handle + ")"
+		}
+	}
+	return "💬 " + label
 }
 
 func (p *Poller) handleAPIError(actorDID string, err error) error {
