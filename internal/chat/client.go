@@ -63,39 +63,40 @@ type APIClient interface {
 
 type Client struct {
 	httpClient *http.Client
+	serviceURL string
 }
 
 func NewClient(httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
-	return &Client{httpClient: httpClient}
+	return &Client{httpClient: httpClient, serviceURL: defaultChatServiceURL}
 }
 
-func (c *Client) GetLog(ctx context.Context, pdsHost, accessJWT, cursor string) (LogPage, error) {
+func (c *Client) GetLog(ctx context.Context, _ string, accessJWT, cursor string) (LogPage, error) {
 	query := url.Values{}
 	if cursor != "" {
 		query.Set("cursor", cursor)
 	}
 	var page LogPage
-	err := c.get(ctx, pdsHost+"/xrpc/chat.bsky.convo.getLog?"+query.Encode(), accessJWT, &page)
+	err := c.get(ctx, c.serviceURL+"/xrpc/chat.bsky.convo.getLog?"+query.Encode(), accessJWT, &page)
 	return page, err
 }
 
-func (c *Client) GetConversation(ctx context.Context, pdsHost, accessJWT, conversationID string) (Conversation, error) {
+func (c *Client) GetConversation(ctx context.Context, _ string, accessJWT, conversationID string) (Conversation, error) {
 	query := url.Values{"convoId": []string{conversationID}}
 	var response struct {
 		Conversation Conversation `json:"convo"`
 	}
-	err := c.get(ctx, pdsHost+"/xrpc/chat.bsky.convo.getConvo?"+query.Encode(), accessJWT, &response)
+	err := c.get(ctx, c.serviceURL+"/xrpc/chat.bsky.convo.getConvo?"+query.Encode(), accessJWT, &response)
 	return response.Conversation, err
 }
 
-func (c *Client) GetPreferences(ctx context.Context, pdsHost, accessJWT string) (Preferences, error) {
+func (c *Client) GetPreferences(ctx context.Context, _ string, accessJWT string) (Preferences, error) {
 	var response struct {
 		Preferences Preferences `json:"preferences"`
 	}
-	err := c.get(ctx, pdsHost+"/xrpc/chat.bsky.notification.getPreferences", accessJWT, &response)
+	err := c.get(ctx, c.serviceURL+"/xrpc/chat.bsky.notification.getPreferences", accessJWT, &response)
 	return response.Preferences, err
 }
 
@@ -105,7 +106,6 @@ func (c *Client) get(ctx context.Context, endpoint, accessJWT string, output any
 		return err
 	}
 	request.Header.Set("Authorization", "Bearer "+accessJWT)
-	request.Header.Set("atproto-proxy", chatProxy)
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return fmt.Errorf("chat request failed: %w", err)

@@ -14,6 +14,7 @@ type Manager struct {
 	store               *store.Store
 	cipher              *credentialCipher
 	sessions            *sessionClient
+	chatServiceURL      string
 	devMode             bool
 	onEnrollmentChanged func()
 }
@@ -23,7 +24,10 @@ func NewManager(s *store.Store, encryptionKey []byte, client *http.Client, devMo
 	if err != nil {
 		return nil, err
 	}
-	return &Manager{store: s, cipher: cipher, sessions: newSessionClient(client), devMode: devMode}, nil
+	return &Manager{
+		store: s, cipher: cipher, sessions: newSessionClient(client),
+		chatServiceURL: defaultChatServiceURL, devMode: devMode,
+	}, nil
 }
 
 func (m *Manager) SetEnrollmentChangedCallback(callback func()) {
@@ -39,7 +43,7 @@ func (m *Manager) Enroll(ctx context.Context, actorDID, appPassword, rawPDSHost 
 	if err != nil {
 		return err
 	}
-	if err := m.sessions.checkDMAccess(ctx, pdsHost, created.AccessJWT); err != nil {
+	if err := m.sessions.checkDMAccess(ctx, m.chatServiceURL, created.AccessJWT); err != nil {
 		return err
 	}
 	ciphertext, err := m.cipher.seal(credentials{

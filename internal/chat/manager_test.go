@@ -32,10 +32,12 @@ func newTestManager(t *testing.T, handler http.Handler) (*Manager, *store.Store,
 	if err != nil {
 		t.Fatal(err)
 	}
+	manager.chatServiceURL = server.URL
 	return manager, s, server
 }
 
 func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
+	var sawChatService bool
 	var sawProxy bool
 	var sawUnexpectedQuery bool
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +45,8 @@ func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 		case "/xrpc/com.atproto.server.createSession":
 			_ = json.NewEncoder(w).Encode(session{DID: "did:plc:alice", AccessJWT: testJWT(time.Now().Add(time.Hour)), RefreshJWT: "refresh-secret"})
 		case "/xrpc/chat.bsky.convo.getLog":
-			sawProxy = r.Header.Get("atproto-proxy") == chatProxy
+			sawChatService = true
+			sawProxy = r.Header.Get("atproto-proxy") != ""
 			sawUnexpectedQuery = r.URL.RawQuery != ""
 			w.WriteHeader(http.StatusOK)
 		default:
@@ -54,8 +57,11 @@ func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 	if err := manager.Enroll(context.Background(), "did:plc:alice", "password-secret", server.URL); err != nil {
 		t.Fatal(err)
 	}
-	if !sawProxy {
-		t.Fatal("chat scope check did not use the required atproto-proxy header")
+	if !sawChatService {
+		t.Fatal("chat scope check did not reach the configured chat service")
+	}
+	if sawProxy {
+		t.Fatal("direct chat service request unexpectedly used an atproto-proxy header")
 	}
 	if sawUnexpectedQuery {
 		t.Fatal("chat scope check sent parameters that getLog does not support")

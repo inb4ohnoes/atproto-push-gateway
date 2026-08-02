@@ -20,7 +20,7 @@ var (
 	ErrNeedsReauth = errors.New("app password was revoked")
 )
 
-const chatProxy = "did:web:api.bsky.chat#bsky_chat"
+const defaultChatServiceURL = "https://api.bsky.chat"
 
 type session struct {
 	AccessJWT  string `json:"accessJwt"`
@@ -108,13 +108,12 @@ func decodeSession(reader io.Reader, actorDID string) (session, error) {
 	return result, nil
 }
 
-func (c *sessionClient) checkDMAccess(ctx context.Context, pdsHost, accessJWT string) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, pdsHost+"/xrpc/chat.bsky.convo.getLog", nil)
+func (c *sessionClient) checkDMAccess(ctx context.Context, serviceURL, accessJWT string) error {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, serviceURL+"/xrpc/chat.bsky.convo.getLog", nil)
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Authorization", "Bearer "+accessJWT)
-	request.Header.Set("atproto-proxy", chatProxy)
 	response, err := c.httpClient.Do(request)
 	if err != nil {
 		return fmt.Errorf("check chat access: %w", err)
