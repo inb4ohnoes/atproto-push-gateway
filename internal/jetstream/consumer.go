@@ -638,24 +638,10 @@ func (c *Consumer) handleVerificationDelete(verifierDID string, rkey string) {
 	log.Printf("[jetstream] unverified: %s unverified %s (rkey=%s)", verifierDID, subjectDID, rkey)
 }
 
-// reasonTitles maps notification reasons to English titles.
-// Clients can use the data fields to format localized text instead.
-var reasonTitles = map[string]string{
-	"verified":   "Verified",
-	"unverified": "Verification removed",
-}
-
-// reasonActionTemplates maps social notification reasons to English title
-// templates. %s is replaced with the actor's display name or handle.
-var reasonActionTemplates = map[string]string{
-	"like":              "%s liked your post",
-	"repost":            "%s reposted your post",
-	"reply":             "%s replied to your post",
-	"mention":           "%s mentioned you",
-	"quote":             "%s quoted your post",
-	"follow":            "%s followed you",
-	"like-via-repost":   "%s liked a post you reposted",
-	"repost-via-repost": "%s reposted a post you reposted",
+var reasonEmojis = map[string]string{
+	"like": "❤️", "repost": "🔁", "reply": "↩️", "mention": "💬",
+	"quote": "❝", "follow": "👤", "like-via-repost": "❤️",
+	"repost-via-repost": "🔁", "verified": "✅", "unverified": "❌",
 }
 
 // reasonFetchesSubjectText reports whether a reason warrants a lazy
@@ -670,38 +656,65 @@ func reasonFetchesSubjectText(reason string) bool {
 }
 
 func formatNotification(reason, actorDisplayName, actorHandle, postText string) (string, string) {
-	title := reasonTitles[reason]
-	if title == "" {
-		title = "Notification"
-	}
-
-	actorName := actorDisplayName
-	if actorName == "" {
-		actorName = actorHandle
-	}
-	if actorName == "" {
-		actorName = "Someone"
-	}
-
-	if actionTemplate, ok := reasonActionTemplates[reason]; ok {
-		title = fmt.Sprintf(actionTemplate, actorName)
-		if postText != "" && reason != "follow" {
-			return title, postText
-		}
-		if reason == "follow" {
-			return title, "Open Aery to view their profile."
-		}
+	title := formatActorTitle(reasonEmojis[reason], actorDisplayName, actorHandle)
+	switch reason {
+	case "mention":
+		return title, messageBodyOrFallback(postText)
+	case "like":
+		return title, actionBody("Liked", "post", postText)
+	case "repost":
+		return title, actionBody("Reposted", "post", postText)
+	case "reply":
+		return title, actionBody("Replied to", "post", postText)
+	case "quote":
+		return title, actionBody("Quoted", "post", postText)
+	case "like-via-repost":
+		return title, actionBody("Liked", "post you reposted", postText)
+	case "repost-via-repost":
+		return title, actionBody("Reposted", "post you reposted", postText)
+	case "follow":
+		return title, "Followed you"
+	case "verified":
+		return title, "Verified your account"
+	case "unverified":
+		return title, "Removed your account verification"
+	default:
 		return title, "Open Aery to view it."
 	}
+}
 
-	if reason == "verified" {
-		return title, "Your account has been verified"
+func formatActorTitle(emoji, displayName, handle string) string {
+	displayName = strings.TrimSpace(displayName)
+	handle = strings.TrimPrefix(strings.TrimSpace(handle), "@")
+	if displayName == "" && handle == "" {
+		displayName = "Someone"
 	}
-	if reason == "unverified" {
-		return title, "Your account verification was removed"
+	label := displayName
+	if handle != "" {
+		if label == "" {
+			label = "@" + handle
+		} else {
+			label += " (@" + handle + ")"
+		}
 	}
+	if emoji == "" {
+		emoji = "🔔"
+	}
+	return emoji + " " + label
+}
 
-	return title, actorName
+func messageBodyOrFallback(text string) string {
+	if text == "" {
+		return "Open Aery to view it."
+	}
+	return text
+}
+
+func actionBody(action, object, text string) string {
+	if text == "" {
+		return fmt.Sprintf("%s a %s", action, object)
+	}
+	return fmt.Sprintf("%s a %s: “%s”", action, object, text)
 }
 
 func (c *Consumer) sendNotification(actorDID, targetDID, reason, recordURI, subjectURI, postText string) {

@@ -28,6 +28,17 @@ type DMEnrollment struct {
 	State                string
 }
 
+type PendingChatMessage struct {
+	RecipientDID     string
+	ActorDID         string
+	ConversationID   string
+	MessageID        string
+	ActorDisplayName string
+	ActorHandle      string
+	ActorAvatar      string
+	EncryptedBody    []byte
+}
+
 type Store struct {
 	db                  *sql.DB
 	mu                  sync.RWMutex
@@ -83,6 +94,33 @@ func New(dbPath string) (*Store, error) {
 			cursor TEXT NOT NULL DEFAULT '',
 			updated_at TEXT DEFAULT (datetime('now')),
 			FOREIGN KEY (actor_did) REFERENCES dm_enrollments(actor_did) ON DELETE CASCADE
+		);
+		CREATE TABLE IF NOT EXISTS chat_message_dedup (
+			recipient_did TEXT NOT NULL,
+			message_id TEXT NOT NULL,
+			convo_id TEXT NOT NULL,
+			actor_did TEXT NOT NULL,
+			actor_display_name TEXT NOT NULL DEFAULT '',
+			actor_handle TEXT NOT NULL DEFAULT '',
+			actor_avatar TEXT NOT NULL DEFAULT '',
+			delivered INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT DEFAULT (datetime('now')),
+			PRIMARY KEY (recipient_did, message_id)
+		);
+		CREATE TABLE IF NOT EXISTS chat_message_deliveries (
+			recipient_did TEXT NOT NULL,
+			message_id TEXT NOT NULL,
+			token_key TEXT NOT NULL,
+			delivered_at TEXT DEFAULT (datetime('now')),
+			PRIMARY KEY (recipient_did, message_id, token_key)
+		);
+		CREATE TABLE IF NOT EXISTS chat_message_bodies (
+			recipient_did TEXT NOT NULL,
+			message_id TEXT NOT NULL,
+			encrypted_body BLOB NOT NULL,
+			PRIMARY KEY (recipient_did, message_id),
+			FOREIGN KEY (recipient_did, message_id)
+				REFERENCES chat_message_dedup(recipient_did, message_id) ON DELETE CASCADE
 		);
 	`); err != nil {
 		return nil, err
@@ -157,13 +195,127 @@ func (s *Store) RevokeDMEnrollment(actorDID string) error {
 		return err
 	}
 	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM chat_message_bodies WHERE recipient_did = ?", actorDID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec("DELETE FROM chat_cursors WHERE actor_did = ?", actorDID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM chat_message_dedup WHERE recipient_did = ?", actorDID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM chat_message_deliveries WHERE recipient_did = ?", actorDID); err != nil {
 		return err
 	}
 	if _, err := tx.Exec("DELETE FROM dm_enrollments WHERE actor_did = ?", actorDID); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Store) SaveChatPage(actorDID, cursor string, messages []PendingChatMessage) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, message := range messages {
+		if _, err := tx.Exec(`
+			INSERT OR IGNORE INTO chat_message_dedup (
+				recipient_did, message_id, convo_id, actor_did,
+				actor_display_name, actor_handle, actor_avatar
+			) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			message.RecipientDID, message.MessageID, message.ConversationID, message.ActorDID,
+			message.ActorDisplayName, message.ActorHandle, message.ActorAvatar,
+		); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`
+			INSERT OR IGNORE INTO chat_message_bodies (recipient_did, message_id, encrypted_body)
+			SELECT ?, ?, ?
+			WHERE EXISTS (
+				SELECT 1 FROM chat_message_dedup
+				WHERE recipient_did = ? AND message_id = ? AND delivered = 0
+			)`,
+			message.RecipientDID, message.MessageID, message.EncryptedBody,
+			message.RecipientDID, message.MessageID,
+		); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO chat_cursors (actor_did, cursor, updated_at) VALUES (?, ?, datetime('now'))
+		ON CONFLICT(actor_did) DO UPDATE SET cursor = excluded.cursor, updated_at = datetime('now')`,
+		actorDID, cursor,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) GetPendingChatMessages(actorDID string) ([]PendingChatMessage, error) {
+	rows, err := s.db.Query(`
+		SELECT d.recipient_did, d.actor_did, d.convo_id, d.message_id,
+		       d.actor_display_name, d.actor_handle, d.actor_avatar,
+		       COALESCE(b.encrypted_body, x'')
+		FROM chat_message_dedup d
+		LEFT JOIN chat_message_bodies b
+		  ON b.recipient_did = d.recipient_did AND b.message_id = d.message_id
+		WHERE d.recipient_did = ? AND d.delivered = 0
+		ORDER BY d.created_at, d.message_id`, actorDID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var messages []PendingChatMessage
+	for rows.Next() {
+		var message PendingChatMessage
+		if err := rows.Scan(
+			&message.RecipientDID, &message.ActorDID, &message.ConversationID, &message.MessageID,
+			&message.ActorDisplayName, &message.ActorHandle, &message.ActorAvatar,
+			&message.EncryptedBody,
+		); err != nil {
+			return nil, err
+		}
+		messages = append(messages, message)
+	}
+	return messages, rows.Err()
+}
+
+func (s *Store) MarkChatMessageDelivered(recipientDID, messageID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`
+		UPDATE chat_message_dedup SET delivered = 1
+		WHERE recipient_did = ? AND message_id = ?`, recipientDID, messageID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		DELETE FROM chat_message_bodies
+		WHERE recipient_did = ? AND message_id = ?`, recipientDID, messageID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) HasChatMessageTokenDelivery(recipientDID, messageID, tokenKey string) (bool, error) {
+	var exists int
+	err := s.db.QueryRow(`
+		SELECT EXISTS(
+			SELECT 1 FROM chat_message_deliveries
+			WHERE recipient_did = ? AND message_id = ? AND token_key = ?
+		)`, recipientDID, messageID, tokenKey).Scan(&exists)
+	return exists == 1, err
+}
+
+func (s *Store) MarkChatMessageTokenDelivered(recipientDID, messageID, tokenKey string) error {
+	_, err := s.db.Exec(`
+		INSERT OR IGNORE INTO chat_message_deliveries (recipient_did, message_id, token_key)
+		VALUES (?, ?, ?)`, recipientDID, messageID, tokenKey)
+	return err
 }
 
 func (s *Store) MarkDMEnrollmentNeedsReauth(actorDID string) error {

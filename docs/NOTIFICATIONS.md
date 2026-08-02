@@ -31,9 +31,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.subject.uri` → authority part → `did:plc:bob`
 
-**Title template:** `"%s liked your post"`.
+**Title template:** `"❤️ %s (@%s)"` (display name and handle, with graceful fallbacks when either is unavailable).
 
-**Body template:** The liked post text when available, otherwise `"Open Aery to view it."`.
+**Body template:** `"Liked a post: “%s”"` when text is available, otherwise `"Liked a post"`.
 
 **Push Payload:**
 ```json
@@ -82,9 +82,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.subject.uri` → authority part → `did:plc:bob`
 
-**Title template:** `"%s reposted your post"`.
+**Title template:** `"🔁 %s (@%s)"`.
 
-**Body template:** The reposted post text when available, otherwise `"Open Aery to view it."`.
+**Body template:** `"Reposted a post: “%s”"` when text is available, otherwise `"Reposted a post"`.
 
 **Push Payload:**
 ```json
@@ -140,9 +140,9 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.reply.parent.uri` → authority part → `did:plc:bob`
 
-**Title template:** `"%s replied to your post"`.
+**Title template:** `"↩️ %s (@%s)"`.
 
-**Body template:** The reply text when available, otherwise `"Open Aery to view it."`.
+**Body template:** `"Replied to a post: “%s”"` when text is available, otherwise `"Replied to a post"`.
 
 **Push Payload:**
 ```json
@@ -195,7 +195,7 @@ This document describes which ATproto record types trigger push notifications, w
 
 **Target DID extraction:** `record.facets[].features[]` where `$type === "app.bsky.richtext.facet#mention"` → `did` field
 
-**Title template:** `"%s mentioned you"`.
+**Title template:** `"💬 %s (@%s)"`.
 
 **Body template:** The mentioning post text when available, otherwise `"Open Aery to view it."`.
 
@@ -251,9 +251,9 @@ Note: For mentions, `uri` is the mentioning post (actor's post) and there is no 
 
 **Target DID extraction:** `record.embed.record.uri` → authority part → `did:plc:bob`
 
-**Title template:** `"%s quoted your post"`.
+**Title template:** `"❝ %s (@%s)"`.
 
-**Body template:** The quote post text when available, otherwise `"Open Aery to view it."`.
+**Body template:** `"Quoted a post: “%s”"` when text is available, otherwise `"Quoted a post"`.
 
 **Push Payload:**
 ```json

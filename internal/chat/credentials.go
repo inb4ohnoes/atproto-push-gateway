@@ -39,6 +39,10 @@ func (c *credentialCipher) seal(value credentials) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("encode credentials: %w", err)
 	}
+	return c.sealBytes(plaintext)
+}
+
+func (c *credentialCipher) sealBytes(plaintext []byte) ([]byte, error) {
 	nonce := make([]byte, c.aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, fmt.Errorf("create credential nonce: %w", err)
@@ -47,17 +51,25 @@ func (c *credentialCipher) seal(value credentials) ([]byte, error) {
 }
 
 func (c *credentialCipher) open(ciphertext []byte) (credentials, error) {
-	if len(ciphertext) < c.aead.NonceSize() {
-		return credentials{}, fmt.Errorf("encrypted credentials are truncated")
-	}
-	nonce := ciphertext[:c.aead.NonceSize()]
-	plaintext, err := c.aead.Open(nil, nonce, ciphertext[c.aead.NonceSize():], nil)
+	plaintext, err := c.openBytes(ciphertext)
 	if err != nil {
-		return credentials{}, fmt.Errorf("decrypt credentials")
+		return credentials{}, err
 	}
 	var value credentials
 	if err := json.Unmarshal(plaintext, &value); err != nil {
 		return credentials{}, fmt.Errorf("decode credentials")
 	}
 	return value, nil
+}
+
+func (c *credentialCipher) openBytes(ciphertext []byte) ([]byte, error) {
+	if len(ciphertext) < c.aead.NonceSize() {
+		return nil, fmt.Errorf("encrypted value is truncated")
+	}
+	nonce := ciphertext[:c.aead.NonceSize()]
+	plaintext, err := c.aead.Open(nil, nonce, ciphertext[c.aead.NonceSize():], nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt value")
+	}
+	return plaintext, nil
 }

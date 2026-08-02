@@ -24,6 +24,8 @@ x-gateway: &gateway
     DEV_MODE: "false"
     LOG_LEVEL: info
     PUSH_POST_TEXT_FETCH: "true"
+    DM_CREDENTIAL_ENCRYPTION_KEY: ${AERY_DM_CREDENTIAL_ENCRYPTION_KEY:?Set AERY_DM_CREDENTIAL_ENCRYPTION_KEY}
+    CHAT_POLL_INTERVAL_SECONDS: ${AERY_CHAT_POLL_INTERVAL_SECONDS:-15}
   secrets:
     - aery_apns_certificate
   healthcheck:

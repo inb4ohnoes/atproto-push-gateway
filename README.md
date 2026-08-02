@@ -35,16 +35,16 @@ The gateway:
 
 | Event | Default Title | Default Body |
 |---|---|---|
-| Like | X liked your post | Post text, when available |
-| Repost | X reposted your post | Post text, when available |
-| Reply | X replied to your post | Reply text |
-| Mention | X mentioned you | Mentioning post text |
-| Quote | X quoted your post | Quote post text |
-| Follow | X followed you | Open Aery to view their profile |
-| Like via repost | X liked a post you reposted | Post text, when available |
-| Repost via repost | X reposted a post you reposted | Post text, when available |
-| Verified | Verified | Your account has been verified |
-| Unverified | Verification removed | Your account verification was removed |
+| Like | ❤️ X (@handle) | Liked a post: “Post text” |
+| Repost | 🔁 X (@handle) | Reposted a post: “Post text” |
+| Reply | ↩️ X (@handle) | Replied to a post: “Reply text” |
+| Mention | 💬 X (@handle) | Mentioning post text |
+| Quote | ❝ X (@handle) | Quoted a post: “Quote text” |
+| Follow | 👤 X (@handle) | Followed you |
+| Like via repost | ❤️ X (@handle) | Liked a post you reposted: “Post text” |
+| Repost via repost | 🔁 X (@handle) | Reposted a post you reposted: “Post text” |
+| Verified | ✅ X (@handle) | Verified your account |
+| Unverified | ❌ X (@handle) | Removed your account verification |
 
 ### Push Payload
 
@@ -53,8 +53,8 @@ The gateway sends English `title` and `body` as defaults, plus structured `data`
 ```json
 {
   "to": "ExponentPushToken[...]",
-  "title": "Alice liked your post",
-  "body": "Hello world",
+  "title": "❤️ Alice (@alice.bsky.social)",
+  "body": "Liked a post: “Hello world”",
   "sound": "default",
   "mutableContent": true,
   "data": {
@@ -184,6 +184,7 @@ docker run -d \
 | `PUSH_GATEWAY_PORT` | `8080` | HTTP server port |
 | `SQLITE_PATH` | `./push-gateway.db` | Path to SQLite database file |
 | `DM_CREDENTIAL_ENCRYPTION_KEY` | (empty) | Base64-encoded 32-byte AES key used to encrypt app passwords and cached chat session tokens at rest. DM enrollment is disabled when unset. |
+| `CHAT_POLL_INTERVAL_SECONDS` | `15` | Normal per-account delay between successful `chat.bsky.convo.getLog` polls. Transient errors back off independently up to 60 seconds and honor `Retry-After`. |
 | `JETSTREAM_URL` | `wss://jetstream2.us-east.bsky.network/subscribe` | Jetstream WebSocket URL |
 | `EXPO_PUSH_ACCESS_TOKEN` | (empty) | Expo Push API access token |
 | `DEV_MODE` | (empty) | Set to `true` to enable test endpoints and allow the `X-Actor-DID` header to bypass JWT verification for local testing |
@@ -353,7 +354,7 @@ Example Cloudflare Transform Rule: add request header `X-Origin-Verify` with val
 
 ### Display Name Resolution
 
-Push notification bodies show display names ("Alice liked your post") instead of raw DIDs. Names are resolved via the public AppView API (`app.bsky.actor.getProfile`) and cached in memory (1 hour TTL, max 10,000 entries by default — see `PROFILE_CACHE_SIZE`).
+Push notification titles show the event emoji, display name, and handle (for example, `❤️ Alice (@alice.bsky.social)`) instead of raw DIDs. Profiles are resolved via the public AppView API (`app.bsky.actor.getProfile`) and cached in memory (1 hour TTL, max 10,000 entries by default — see `PROFILE_CACHE_SIZE`).
 
 ## Block Handling
 

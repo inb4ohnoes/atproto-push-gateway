@@ -32,17 +32,22 @@ func newTestManager(t *testing.T, handler http.Handler) (*Manager, *store.Store,
 	if err != nil {
 		t.Fatal(err)
 	}
+	manager.chatServiceURL = server.URL
 	return manager, s, server
 }
 
 func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
+	var sawChatService bool
 	var sawProxy bool
+	var sawUnexpectedQuery bool
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/xrpc/com.atproto.server.createSession":
 			_ = json.NewEncoder(w).Encode(session{DID: "did:plc:alice", AccessJWT: testJWT(time.Now().Add(time.Hour)), RefreshJWT: "refresh-secret"})
 		case "/xrpc/chat.bsky.convo.getLog":
-			sawProxy = r.Header.Get("atproto-proxy") == chatProxy
+			sawChatService = true
+			sawProxy = r.Header.Get("atproto-proxy") != ""
+			sawUnexpectedQuery = r.URL.RawQuery != ""
 			w.WriteHeader(http.StatusOK)
 		default:
 			http.NotFound(w, r)
@@ -52,8 +57,14 @@ func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 	if err := manager.Enroll(context.Background(), "did:plc:alice", "password-secret", server.URL); err != nil {
 		t.Fatal(err)
 	}
-	if !sawProxy {
-		t.Fatal("chat scope check did not use the required atproto-proxy header")
+	if !sawChatService {
+		t.Fatal("chat scope check did not reach the configured chat service")
+	}
+	if sawProxy {
+		t.Fatal("direct chat service request unexpectedly used an atproto-proxy header")
+	}
+	if sawUnexpectedQuery {
+		t.Fatal("chat scope check sent parameters that getLog does not support")
 	}
 	enrollment, found, err := s.GetDMEnrollment("did:plc:alice")
 	if err != nil || !found {
@@ -65,15 +76,36 @@ func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 	}
 }
 
+func TestNotificationTextEncryptionRoundTrip(t *testing.T) {
+	manager, _, _ := newTestManager(t, http.NotFoundHandler())
+	plaintext := "private message body"
+	ciphertext, err := manager.EncryptNotificationText(plaintext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(ciphertext), plaintext) {
+		t.Fatal("notification text was not encrypted")
+	}
+	decrypted, err := manager.DecryptNotificationText(ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decrypted != plaintext {
+		t.Fatalf("decrypted %q, want %q", decrypted, plaintext)
+	}
+}
+
 func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 	tests := []struct {
 		name       string
 		createCode int
 		chatCode   int
+		chatBody   string
 		want       error
 	}{
 		{name: "bad password", createCode: http.StatusUnauthorized, want: ErrBadPassword},
 		{name: "missing DM access", createCode: http.StatusOK, chatCode: http.StatusForbidden, want: ErrDMAccess},
+		{name: "missing DM access returned as 501", createCode: http.StatusOK, chatCode: http.StatusNotImplemented, chatBody: `{"error":"InvalidToken","message":"Bad token scope"}`, want: ErrDMAccess},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -87,6 +119,7 @@ func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 					return
 				}
 				w.WriteHeader(test.chatCode)
+				_, _ = w.Write([]byte(test.chatBody))
 			})
 			manager, _, server := newTestManager(t, handler)
 			err := manager.Enroll(context.Background(), "did:plc:alice", "secret", server.URL)
@@ -94,6 +127,22 @@ func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 				t.Fatalf("got %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+func TestEnrollPreservesSafeChatFailureDetailsForDiagnostics(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/xrpc/com.atproto.server.createSession" {
+			_ = json.NewEncoder(w).Encode(session{DID: "did:plc:alice", AccessJWT: testJWT(time.Now().Add(time.Hour)), RefreshJWT: "refresh"})
+			return
+		}
+		w.WriteHeader(http.StatusNotImplemented)
+		_, _ = w.Write([]byte(`{"error":"AccountFeatureUnavailable","message":"chat migration pending"}`))
+	})
+	manager, _, server := newTestManager(t, handler)
+	err := manager.Enroll(context.Background(), "did:plc:alice", "secret", server.URL)
+	if err == nil || err.Error() != "chat access check returned HTTP 501: AccountFeatureUnavailable chat migration pending" {
+		t.Fatalf("unexpected diagnostic error: %v", err)
 	}
 }
 
