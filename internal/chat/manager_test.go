@@ -124,6 +124,22 @@ func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 	}
 }
 
+func TestEnrollPreservesSafeChatFailureDetailsForDiagnostics(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/xrpc/com.atproto.server.createSession" {
+			_ = json.NewEncoder(w).Encode(session{DID: "did:plc:alice", AccessJWT: testJWT(time.Now().Add(time.Hour)), RefreshJWT: "refresh"})
+			return
+		}
+		w.WriteHeader(http.StatusNotImplemented)
+		_, _ = w.Write([]byte(`{"error":"AccountFeatureUnavailable","message":"chat migration pending"}`))
+	})
+	manager, _, server := newTestManager(t, handler)
+	err := manager.Enroll(context.Background(), "did:plc:alice", "secret", server.URL)
+	if err == nil || err.Error() != "chat access check returned HTTP 501: AccountFeatureUnavailable chat migration pending" {
+		t.Fatalf("unexpected diagnostic error: %v", err)
+	}
+}
+
 func TestAccessTokenFallsBackToCreateAndMarksRevokedCredential(t *testing.T) {
 	createCalls := 0
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

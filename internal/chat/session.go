@@ -138,6 +138,13 @@ func (c *sessionClient) checkDMAccess(ctx context.Context, pdsHost, accessJWT st
 	if response.StatusCode == http.StatusUnauthorized {
 		return ErrNeedsReauth
 	}
+	diagnostic := strings.Join(strings.Fields(xrpcError.Error+" "+xrpcError.Message), " ")
+	if runes := []rune(diagnostic); len(runes) > 300 {
+		diagnostic = string(runes[:300]) + "…"
+	}
+	if diagnostic != "" {
+		return fmt.Errorf("chat access check returned HTTP %d: %s", response.StatusCode, diagnostic)
+	}
 	return fmt.Errorf("chat access check returned HTTP %d", response.StatusCode)
 }
 
