@@ -17,6 +17,9 @@ Do not expose either container port directly to the internet.
 
 - Apple Push Services `.p12` certificate at `deployment/aery/secrets/apns.p12`
 - a long random origin-verification secret injected by Cloudflare
+- a base64-encoded 32-byte DM credential encryption key, shared by the production
+  and development containers so either environment can decrypt only its own
+  volume-backed enrollment records
 
 The certificate and `.env` file are excluded from both Git and the Docker build context.
 
