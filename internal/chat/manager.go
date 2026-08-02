@@ -133,3 +133,15 @@ func (m *Manager) MarkNeedsReauth(actorDID string) error {
 	}
 	return nil
 }
+
+func (m *Manager) EncryptNotificationText(text string) ([]byte, error) {
+	return m.cipher.sealBytes([]byte(text))
+}
+
+func (m *Manager) DecryptNotificationText(ciphertext []byte) (string, error) {
+	plaintext, err := m.cipher.openBytes(ciphertext)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
+}

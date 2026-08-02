@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/dracoblue/atproto-push-gateway/internal/push"
 	"github.com/dracoblue/atproto-push-gateway/internal/store"
@@ -20,6 +21,8 @@ const directConversationType = "chat.bsky.convo.defs#directConvo"
 type AccessTokenProvider interface {
 	AccessToken(context.Context, string) (string, string, error)
 	MarkNeedsReauth(string) error
+	EncryptNotificationText(string) ([]byte, error)
+	DecryptNotificationText([]byte) (string, error)
 }
 
 type Poller struct {
@@ -43,6 +46,7 @@ type logCreateMessage struct {
 type message struct {
 	Type   string `json:"$type"`
 	ID     string `json:"id"`
+	Text   string `json:"text"`
 	Sender struct {
 		DID string `json:"did"`
 	} `json:"sender"`
@@ -121,10 +125,15 @@ func (p *Poller) filterMessages(ctx context.Context, actorDID, pdsHost, accessJW
 		if preference.Include == "follows" && profile.Viewer.Following == "" {
 			continue
 		}
+		encryptedBody, err := p.credentials.EncryptNotificationText(event.Message.Text)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt notification text: %w", err)
+		}
 		pending = append(pending, store.PendingChatMessage{
 			RecipientDID: actorDID, ActorDID: event.Message.Sender.DID,
 			ConversationID: event.ConversationID, MessageID: event.Message.ID,
 			ActorDisplayName: profile.DisplayName, ActorHandle: profile.Handle, ActorAvatar: profile.Avatar,
+			EncryptedBody: encryptedBody,
 		})
 	}
 	return pending, nil
@@ -147,6 +156,24 @@ func (p *Poller) deliverPending(actorDID string) error {
 		return err
 	}
 	for _, message := range messages {
+		body := "Open Aery to view it."
+		if len(message.EncryptedBody) > 0 {
+			body, err = p.credentials.DecryptNotificationText(message.EncryptedBody)
+			if err != nil {
+				return fmt.Errorf("decrypt notification text: %w", err)
+			}
+		}
+		body = chatNotificationBody(body)
+		if body == "" {
+			body = "Open Aery to view it."
+		}
+		senderName := strings.TrimSpace(message.ActorDisplayName)
+		if senderName == "" {
+			senderName = strings.TrimSpace(message.ActorHandle)
+		}
+		if senderName == "" {
+			senderName = "Someone"
+		}
 		tokens, err := p.store.GetTokensForDID(actorDID)
 		if err != nil {
 			return err
@@ -162,7 +189,7 @@ func (p *Poller) deliverPending(actorDID string) error {
 			}
 			notification := push.Notification{
 				Token: token.PushToken, Platform: token.Platform,
-				Title: "New message", Body: "Open Aery to view it.",
+				Title: senderName + " messaged you", Body: body,
 				Data: map[string]string{
 					"reason": "chat", "recipientDid": message.RecipientDID,
 					"actorDid": message.ActorDID, "convoId": message.ConversationID,
@@ -189,6 +216,15 @@ func (p *Poller) deliverPending(actorDID string) error {
 		log.Printf("[chat] delivered message notification for %s from %s", actorDID, message.ActorDID)
 	}
 	return nil
+}
+
+func chatNotificationBody(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) > 300 {
+		return string(runes[:300]) + "…"
+	}
+	return text
 }
 
 func (p *Poller) handleAPIError(actorDID string, err error) error {

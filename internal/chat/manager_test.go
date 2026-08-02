@@ -65,6 +65,25 @@ func TestEnrollEncryptsCredentialsAndChecksChatScope(t *testing.T) {
 	}
 }
 
+func TestNotificationTextEncryptionRoundTrip(t *testing.T) {
+	manager, _, _ := newTestManager(t, http.NotFoundHandler())
+	plaintext := "private message body"
+	ciphertext, err := manager.EncryptNotificationText(plaintext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(ciphertext), plaintext) {
+		t.Fatal("notification text was not encrypted")
+	}
+	decrypted, err := manager.DecryptNotificationText(ciphertext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decrypted != plaintext {
+		t.Fatalf("decrypted %q, want %q", decrypted, plaintext)
+	}
+}
+
 func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 	tests := []struct {
 		name       string

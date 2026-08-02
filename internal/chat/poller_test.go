@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,14 @@ func (f *fakeAccessTokenProvider) AccessToken(context.Context, string) (string, 
 func (f *fakeAccessTokenProvider) MarkNeedsReauth(actorDID string) error {
 	f.marked = append(f.marked, actorDID)
 	return nil
+}
+
+func (f *fakeAccessTokenProvider) EncryptNotificationText(text string) ([]byte, error) {
+	return append([]byte("encrypted:"), []byte(text)...), nil
+}
+
+func (f *fakeAccessTokenProvider) DecryptNotificationText(ciphertext []byte) (string, error) {
+	return string(bytes.TrimPrefix(ciphertext, []byte("encrypted:"))), nil
 }
 
 type fakeChatAPI struct {
@@ -115,7 +124,7 @@ func newPollerStore(t *testing.T) *store.Store {
 	return s
 }
 
-func TestPollerResumesFiltersAndDeduplicatesWithoutMessageText(t *testing.T) {
+func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T) {
 	s := newPollerStore(t)
 	senderProfile := Profile{DID: "did:plc:sender", Handle: "sender.test", DisplayName: "Sender", Avatar: "https://example.com/avatar.jpg"}
 	senderProfile.Viewer.Following = "at://did:plc:me/app.bsky.graph.follow/1"
@@ -169,9 +178,19 @@ func TestPollerResumesFiltersAndDeduplicatesWithoutMessageText(t *testing.T) {
 	if _, exists := notification.Data["uri"]; exists {
 		t.Fatal("chat payload must not invent an AT URI")
 	}
-	encoded, _ := json.Marshal(notification)
-	if bytes.Contains(encoded, []byte("TOP SECRET MESSAGE")) || bytes.Contains(logs.Bytes(), []byte("TOP SECRET MESSAGE")) {
-		t.Fatal("message text reached a payload or log")
+	if notification.Title != "Sender messaged you" || notification.Body != "TOP SECRET MESSAGE" {
+		t.Fatalf("unexpected notification presentation: title=%q body=%q", notification.Title, notification.Body)
+	}
+	encodedData, _ := json.Marshal(notification.Data)
+	if bytes.Contains(encodedData, []byte("TOP SECRET MESSAGE")) || bytes.Contains(logs.Bytes(), []byte("TOP SECRET MESSAGE")) {
+		t.Fatal("message text reached custom payload data or a log")
+	}
+	pending, err := s.GetPendingChatMessages("did:plc:me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatal("delivered message body was retained")
 	}
 	if got := api.cursors; len(got) != 3 || got[0] != "" || got[1] != "c1" || got[2] != "c2" {
 		t.Fatalf("unexpected cursor sequence: %#v", got)
@@ -265,5 +284,16 @@ func TestNextPollDelayBackoffAndRateLimit(t *testing.T) {
 	}
 	if got := nextPollDelay(0, normal, &HTTPStatusError{StatusCode: 429, RetryAfter: 37 * time.Second}); got != 37*time.Second {
 		t.Fatalf("retry-after delay=%v", got)
+	}
+}
+
+func TestChatNotificationBodySanitizesAndTruncates(t *testing.T) {
+	if got := chatNotificationBody("  private\n\tmessage  "); got != "private message" {
+		t.Fatalf("sanitized body=%q", got)
+	}
+	long := strings.Repeat("🙂", 301)
+	got := chatNotificationBody(long)
+	if len([]rune(got)) != 301 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("body was not safely truncated: rune count=%d", len([]rune(got)))
 	}
 }
