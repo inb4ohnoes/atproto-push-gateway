@@ -193,7 +193,7 @@ func TestPollerResumesFiltersAndDeduplicatesWithPrivateMessageText(t *testing.T)
 	if _, exists := notification.Data["uri"]; exists {
 		t.Fatal("chat payload must not invent an AT URI")
 	}
-	if notification.Title != "💬 Sender (@sender.test)" || notification.Body != "TOP SECRET MESSAGE" {
+	if notification.Title != "✉️ Sender (@sender.test)" || notification.Body != "TOP SECRET MESSAGE" {
 		t.Fatalf("unexpected notification presentation: title=%q body=%q", notification.Title, notification.Body)
 	}
 	encodedData, _ := json.Marshal(notification.Data)

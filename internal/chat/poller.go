@@ -246,7 +246,7 @@ func formatChatActorTitle(displayName, handle string) string {
 			label += " (@" + handle + ")"
 		}
 	}
-	return "💬 " + label
+	return "✉️ " + label
 }
 
 func (p *Poller) handleAPIError(actorDID string, err error) error {

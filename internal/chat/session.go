@@ -120,16 +120,25 @@ func (c *sessionClient) checkDMAccess(ctx context.Context, pdsHost, accessJWT st
 		return fmt.Errorf("check chat access: %w", err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		return nil
+	}
+	var xrpcError struct {
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+	_ = json.NewDecoder(io.LimitReader(response.Body, 64*1024)).Decode(&xrpcError)
+	errorText := strings.ToLower(xrpcError.Error + " " + xrpcError.Message)
+	if strings.Contains(errorText, "token scope") {
+		return ErrDMAccess
+	}
 	if response.StatusCode == http.StatusForbidden {
 		return ErrDMAccess
 	}
 	if response.StatusCode == http.StatusUnauthorized {
 		return ErrNeedsReauth
 	}
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return fmt.Errorf("chat access check returned HTTP %d", response.StatusCode)
-	}
-	return nil
+	return fmt.Errorf("chat access check returned HTTP %d", response.StatusCode)
 }
 
 func jwtExpiresSoon(token string, now time.Time) bool {

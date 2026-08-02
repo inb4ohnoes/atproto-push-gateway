@@ -89,10 +89,12 @@ func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 		name       string
 		createCode int
 		chatCode   int
+		chatBody   string
 		want       error
 	}{
 		{name: "bad password", createCode: http.StatusUnauthorized, want: ErrBadPassword},
 		{name: "missing DM access", createCode: http.StatusOK, chatCode: http.StatusForbidden, want: ErrDMAccess},
+		{name: "missing DM access returned as 501", createCode: http.StatusOK, chatCode: http.StatusNotImplemented, chatBody: `{"error":"InvalidToken","message":"Bad token scope"}`, want: ErrDMAccess},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -106,6 +108,7 @@ func TestEnrollDistinguishesPasswordAndDMScopeFailures(t *testing.T) {
 					return
 				}
 				w.WriteHeader(test.chatCode)
+				_, _ = w.Write([]byte(test.chatBody))
 			})
 			manager, _, server := newTestManager(t, handler)
 			err := manager.Enroll(context.Background(), "did:plc:alice", "secret", server.URL)
