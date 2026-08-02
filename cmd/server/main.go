@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/dracoblue/atproto-push-gateway/internal/chat"
 	"github.com/dracoblue/atproto-push-gateway/internal/did"
 	"github.com/dracoblue/atproto-push-gateway/internal/jetstream"
 	"github.com/dracoblue/atproto-push-gateway/internal/originverify"
@@ -60,6 +61,7 @@ func main() {
 	appViewURL := getEnv("PUSH_APPVIEW_URL", "https://public.api.bsky.app")
 	postTextFetch := getEnv("PUSH_POST_TEXT_FETCH", "true") == "true"
 	postTextCacheSize := getEnvInt64("PUSH_POST_TEXT_CACHE_SIZE", 10000)
+	dmCredentialKeyBase64 := getEnv("DM_CREDENTIAL_ENCRYPTION_KEY", "")
 
 	// Origin-verify shared-secret middleware (AWS CloudFront / Cloudflare
 	// custom-header pattern). When ORIGIN_VERIFY_SECRET is empty the
@@ -235,6 +237,23 @@ func main() {
 	// Initialize HTTP server
 	mux := http.NewServeMux()
 	handler := xrpc.NewHandler(s, devMode, serviceDID, func() interface{} { return consumer.GetStats() }, consumer.NotifyTokenRegistered)
+	if dmCredentialKeyBase64 != "" {
+		dmCredentialKey, err := base64.StdEncoding.DecodeString(dmCredentialKeyBase64)
+		if err != nil {
+			dmCredentialKey, err = base64.RawStdEncoding.DecodeString(dmCredentialKeyBase64)
+		}
+		if err != nil {
+			log.Fatalf("DM_CREDENTIAL_ENCRYPTION_KEY must be base64 encoded")
+		}
+		chatManager, err := chat.NewManager(s, dmCredentialKey, nil, devMode)
+		if err != nil {
+			log.Fatalf("Failed to initialize DM credential manager: %v", err)
+		}
+		handler.SetChatEnrollmentManager(chatManager)
+		log.Printf("  DM push:   enrollment enabled")
+	} else {
+		log.Printf("  DM push:   disabled (no credential encryption key configured)")
+	}
 	handler.SetDIDResolver(did.NewResolverWithCacheSize(int(didCacheSize)))
 	handler.RegisterRoutes(mux, serviceDID)
 

@@ -21,6 +21,13 @@ type Block struct {
 	RKey       string
 }
 
+type DMEnrollment struct {
+	ActorDID             string
+	PDSHost              string
+	EncryptedCredentials []byte
+	State                string
+}
+
 type Store struct {
 	db                  *sql.DB
 	mu                  sync.RWMutex
@@ -63,6 +70,20 @@ func New(dbPath string) (*Store, error) {
 			actor_did TEXT PRIMARY KEY,
 			backfilled_at TEXT DEFAULT (datetime('now'))
 		);
+		CREATE TABLE IF NOT EXISTS dm_enrollments (
+			actor_did TEXT PRIMARY KEY,
+			pds_host TEXT NOT NULL,
+			encrypted_credentials BLOB,
+			state TEXT NOT NULL CHECK (state IN ('active', 'needs_reauth')),
+			created_at TEXT DEFAULT (datetime('now')),
+			updated_at TEXT DEFAULT (datetime('now'))
+		);
+		CREATE TABLE IF NOT EXISTS chat_cursors (
+			actor_did TEXT PRIMARY KEY,
+			cursor TEXT NOT NULL DEFAULT '',
+			updated_at TEXT DEFAULT (datetime('now')),
+			FOREIGN KEY (actor_did) REFERENCES dm_enrollments(actor_did) ON DELETE CASCADE
+		);
 	`); err != nil {
 		return nil, err
 	}
@@ -83,6 +104,92 @@ func New(dbPath string) (*Store, error) {
 	}
 
 	return s, nil
+}
+
+func (s *Store) UpsertDMEnrollment(enrollment DMEnrollment) error {
+	_, err := s.db.Exec(`
+		INSERT INTO dm_enrollments (actor_did, pds_host, encrypted_credentials, state, updated_at)
+		VALUES (?, ?, ?, ?, datetime('now'))
+		ON CONFLICT(actor_did) DO UPDATE SET
+			pds_host = excluded.pds_host,
+			encrypted_credentials = excluded.encrypted_credentials,
+			state = excluded.state,
+			updated_at = datetime('now')`,
+		enrollment.ActorDID, enrollment.PDSHost, enrollment.EncryptedCredentials, enrollment.State,
+	)
+	return err
+}
+
+func (s *Store) GetDMEnrollment(actorDID string) (DMEnrollment, bool, error) {
+	var enrollment DMEnrollment
+	err := s.db.QueryRow(`
+		SELECT actor_did, pds_host, encrypted_credentials, state
+		FROM dm_enrollments WHERE actor_did = ?`, actorDID,
+	).Scan(&enrollment.ActorDID, &enrollment.PDSHost, &enrollment.EncryptedCredentials, &enrollment.State)
+	if err == sql.ErrNoRows {
+		return DMEnrollment{}, false, nil
+	}
+	return enrollment, err == nil, err
+}
+
+func (s *Store) ListActiveDMEnrollments() ([]DMEnrollment, error) {
+	rows, err := s.db.Query(`
+		SELECT actor_did, pds_host, encrypted_credentials, state
+		FROM dm_enrollments WHERE state = 'active'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var enrollments []DMEnrollment
+	for rows.Next() {
+		var enrollment DMEnrollment
+		if err := rows.Scan(&enrollment.ActorDID, &enrollment.PDSHost, &enrollment.EncryptedCredentials, &enrollment.State); err != nil {
+			return nil, err
+		}
+		enrollments = append(enrollments, enrollment)
+	}
+	return enrollments, rows.Err()
+}
+
+func (s *Store) RevokeDMEnrollment(actorDID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("DELETE FROM chat_cursors WHERE actor_did = ?", actorDID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM dm_enrollments WHERE actor_did = ?", actorDID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) MarkDMEnrollmentNeedsReauth(actorDID string) error {
+	_, err := s.db.Exec(`
+		UPDATE dm_enrollments
+		SET encrypted_credentials = NULL, state = 'needs_reauth', updated_at = datetime('now')
+		WHERE actor_did = ?`, actorDID)
+	return err
+}
+
+func (s *Store) GetChatCursor(actorDID string) (string, error) {
+	var cursor string
+	err := s.db.QueryRow("SELECT cursor FROM chat_cursors WHERE actor_did = ?", actorDID).Scan(&cursor)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return cursor, err
+}
+
+func (s *Store) SetChatCursor(actorDID, cursor string) error {
+	_, err := s.db.Exec(`
+		INSERT INTO chat_cursors (actor_did, cursor, updated_at) VALUES (?, ?, datetime('now'))
+		ON CONFLICT(actor_did) DO UPDATE SET cursor = excluded.cursor, updated_at = datetime('now')`,
+		actorDID, cursor,
+	)
+	return err
 }
 
 func (s *Store) loadIntoMemory() error {
