@@ -149,6 +149,74 @@ func TestUnregisterPush(t *testing.T) {
 	}
 }
 
+func TestRegisterPushSupportsMultipleDevicesForOneAccount(t *testing.T) {
+	h, s := newTestHandler(t)
+
+	mux := http.NewServeMux()
+	h.RegisterRoutes(mux, "did:web:push.example.org")
+
+	register := func(token string) {
+		t.Helper()
+		body, err := json.Marshal(RegisterPushRequest{
+			ServiceDID: "did:web:push.example.org",
+			Token:      token,
+			Platform:   "ios",
+			AppID:      "org.example.app",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest("POST", "/xrpc/"+lexiconRegisterPush, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Actor-DID", "did:plc:alice")
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("register %q: expected 200, got %d: %s", token, w.Code, w.Body.String())
+		}
+	}
+
+	register("first-device")
+	register("second-device")
+
+	tokens, err := s.GetTokensForDID("did:plc:alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 2 {
+		t.Fatalf("expected both device tokens to be retained, got %d", len(tokens))
+	}
+
+	body, err := json.Marshal(RegisterPushRequest{
+		ServiceDID: "did:web:push.example.org",
+		Token:      "first-device",
+		Platform:   "ios",
+		AppID:      "org.example.app",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("POST", "/xrpc/"+lexiconUnregisterPush, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Actor-DID", "did:plc:alice")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("unregister first device: expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	tokens, err = s.GetTokensForDID("did:plc:alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tokens) != 1 || tokens[0].PushToken != "second-device" {
+		t.Fatalf("expected only the second device to remain, got %#v", tokens)
+	}
+	if !s.IsRegistered("did:plc:alice") {
+		t.Error("expected account to remain registered while another device is subscribed")
+	}
+}
+
 func TestRegisterPushNoAuth(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
 	s, _ := store.New(dbPath)

@@ -116,6 +116,36 @@ func TestHandleCommit_LikeNotifiesRegisteredTarget(t *testing.T) {
 	}
 }
 
+func TestHandleCommit_FansOutToEveryRegisteredDevice(t *testing.T) {
+	c, s, sender := newTestConsumer(t)
+	for _, token := range []string{"first-device", "second-device"} {
+		if err := s.RegisterToken("did:plc:bob", "ios", token, "org.example.app"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	c.handleCommit("did:plc:alice", commitEvent("create", "app.bsky.feed.like", "3kco", map[string]interface{}{
+		"subject": map[string]string{"uri": "at://did:plc:bob/app.bsky.feed.post/abc", "cid": "x"},
+	}))
+
+	sent := sender.notifications()
+	if len(sent) != 2 {
+		t.Fatalf("expected one notification per registered device, got %d", len(sent))
+	}
+	receivedTokens := make(map[string]bool, len(sent))
+	for _, notification := range sent {
+		receivedTokens[notification.Token] = true
+		if notification.Data["recipientDid"] != "did:plc:bob" {
+			t.Errorf("unexpected recipient for token %q: %q", notification.Token, notification.Data["recipientDid"])
+		}
+	}
+	for _, token := range []string{"first-device", "second-device"} {
+		if !receivedTokens[token] {
+			t.Errorf("device %q did not receive the notification", token)
+		}
+	}
+}
+
 func TestHandleCommit_LikeIgnoresUnregisteredAndSelf(t *testing.T) {
 	c, s, sender := newTestConsumer(t)
 	s.RegisterToken("did:plc:bob", "ios", "ExponentPushToken[bob]", "org.example.app")
